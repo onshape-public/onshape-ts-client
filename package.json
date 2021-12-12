@@ -1,0 +1,37 @@
+{
+  "name": "onshape-ts-client",
+  "version": "1.0.0",
+  "description": "Examples of Onshape APIs in typescript",
+  "scripts": {
+    "build": "npm install && tsc",
+    "processfolder": "rm -f ./main.log && node .compiledjs/folder.js --folder"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ptrajkumar/onshape-ts-client.git"
+  },
+  "author": "ptrajkumar",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/ptrajkumar/onshape-ts-client/issues"
+  },
+  "homepage": "https://github.com/ptrajkumar/onshape-ts-client#readme",
+  "dependencies": {
+    "log4js": "^6.3.0",
+    "minimist": "^1.2.5",
+    "mkdirp": "^1.0.4",
+    "randomstring": "^1.2.1",
+    "typescript": "^4.5.3",
+    "unirest": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/minimist": "^1.2.2",
+    "@types/mkdirp": "^1.0.2",
+    "@types/node": "^16.11.12",
+    "@types/randomstring": "^1.1.8",
+    "@typescript-eslint/eslint-plugin": "^5.6.0",
+    "@typescript-eslint/parser": "^5.6.0",
+    "eslint": "^8.4.1",
+    "eslint-config-google": "^0.14.0"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "es2021",
+    "module": "commonjs",
+    "outDir": ".compiledjs",
+    "sourceMap": true,
+    "strictNullChecks": false,
+    "moduleResolution": "node",
+    "strict": true
+  },
+  "include": [
+    "folder.ts",
+    "./utils/*.ts",
+    "./decl/*.d.ts"
+  ],
+  "exclude": [
+    "./node_modules"
+  ],
+}

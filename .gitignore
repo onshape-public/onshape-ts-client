@@ -1,0 +1,8 @@
+node_modules/
+.compiledjs/
+output/
+package-lock.json
+.DS_Store
+*.log
+*.csv
+credentials.json
