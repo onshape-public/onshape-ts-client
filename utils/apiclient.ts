@@ -1,6 +1,7 @@
 import * as randomstring from 'randomstring';
 import * as crypto from 'crypto';
-import * as fs from 'fs';
+import { promises as fs } from 'fs';
+import { constants } from 'fs';
 import * as unirest from 'unirest';
 import { IUniResponse, IUniRest } from 'unirest';
 import { mainLog } from './logger';
@@ -20,11 +21,13 @@ export class ApiClient {
 
   public static async createApiClient(stackToUse?: string): Promise<ApiClient> {
     const credentialsFilePath = './credentials.json';
-    if (!fs.existsSync(credentialsFilePath)) {
+    try {
+      await fs.access(credentialsFilePath, constants.R_OK);
+    } catch {
       throw new Error(`${credentialsFilePath} not found`);
     }
 
-    const fileJson: string = fs.readFileSync(credentialsFilePath, 'utf8') as string;
+    const fileJson: string = await fs.readFile(credentialsFilePath, 'utf8') as string;
     const credentials = JSON.parse(fileJson) as { [id: string]: StackCredential; };
     let credsToUse: StackCredential = null;
     for (const [key, value] of Object.entries(credentials)) {

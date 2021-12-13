@@ -1,6 +1,7 @@
 import { mainLog } from './utils/logger';
 import * as minimist from 'minimist';
-import * as fs from 'fs';
+import { promises as fs } from 'fs';
+import { constants } from 'fs';
 import * as mkdirp from 'mkdirp';
 import {
   BasicNode,
@@ -11,109 +12,154 @@ import {
   WorkspaceRef
 } from './utils/onshapetypes';
 import { ApiClient } from './utils/apiclient';
+import { CsvFileWriter } from './utils/csvFile';
 
 const LOG = mainLog();
 const OUTPUT_FOLDER = './output';
 const csvReport = './references.csv';
 
 class SummayReport {
-  private allDocsById = new Map<string, DocumentNode>();
-  private docToExtRef = new Map<string, DocumentNode[]>();
+  private allDocIds = new Set<string>();
+  private docToExtRef = new Map<string, Set<string>>();
   private processedDocs = new Map<string, DocumentNode>();
   private processedFolders = new Map<string, BasicNode>();
   private docToParent = new Map<string, BasicNode>();
   private folderDocs = new Map<string, DocumentNode>();
+  private csvWriter = new CsvFileWriter(csvReport);
 
-  public printReport() {
+  public async printReport() {
     LOG.info('Processed folder count=', this.processedFolders.size);
     LOG.info('Processed doc in folder count=', this.folderDocs.size);
     LOG.info('Processed document count=', this.processedDocs.size);
-    LOG.info('Encountered document count=', this.allDocsById.size);
-
-    const outSideDocuments = Array.from(this.allDocsById.values()).filter((d) => !this.folderDocs.has(d.id));
-
-    for (const doc of outSideDocuments) {
-      LOG.info(`Outside doc id=${doc.id} name=${doc.name} description=${doc.description}`);
-    }
-
-    fs.writeFileSync(csvReport, 'DocumentId, DocumentName, Description, FolderId , FolderName, Outside, OwnerId, OwnerName, Created By, Modified By\n');
-    for (const doc of this.allDocsById.values()) {
-      let line: string[] = [];
-      line.push(doc.id || '');
-      line.push(doc.name || '');
-      line.push(doc.description || '');
-      const folder = this.docToParent.get(doc.id);
-      const folderId = folder ? folder.id : '';
-      const folderName = folder ? folder.name : '';
-      line.push(folderId, folderName);
-      line.push(folder ? 'No' : 'Yes');
-      const docOwnerId = doc.owner && doc.owner.id ? doc.owner.id : '';
-      const docOwnerName = doc.owner && doc.owner.name ? doc.owner.name : '';
-      const docCreator = doc.createdBy && doc.createdBy.name ? doc.createdBy.name : '';
-      const docModifier = doc.modifiedBy && doc.modifiedBy.name ? doc.modifiedBy.name : '';
-      line.push(docOwnerId, docOwnerName, docCreator, docModifier);
-      line = line.map((x) => x.replaceAll(',', '_'));
-      fs.appendFileSync(csvReport, line.join(',') + '\n');
-    }
+    LOG.info('Encountered document count=', this.allDocIds.size);
   }
 
   public constructor(private apiClient: ApiClient) { }
 
-  private async getExternalReferences(doc: DocumentNode) {
-    const docById = new Map<string, DocumentNode>();
+  private async getExternalReferences(doc: DocumentNode): Promise<Set<string>> {
+    const documentExtRefs = new Set<string>();
     const workspacesReq = `api/documents/d/${doc.id}/workspaces`;
     const workspaceList = await this.apiClient.get(workspacesReq) as BasicNode[];
     for (const workspace of workspaceList) {
-      const fileName = `${OUTPUT_FOLDER}/workspace_${workspace.id}.json`;
+      const fileName = `${OUTPUT_FOLDER}/workspace_${workspace.id}_document_${doc.id}.json`;
       LOG.info(`    Processing workspace=${workspace.id} name=${workspace.name}`);
       let workspaceRef: WorkspaceRef = null;
-      if (fs.existsSync(fileName)) {
-        workspaceRef = JSON.parse(fs.readFileSync(fileName, 'utf8') as string);
-      } else {
+
+      try {
+        await fs.access(fileName, constants.R_OK);
+        workspaceRef = JSON.parse(await fs.readFile(fileName, 'utf8'));
+      } catch {
         workspaceRef = await this.apiClient.get(`api/documents/d/${doc.id}/w/${workspace.id}/externalreferences`) as WorkspaceRef;
-        fs.writeFileSync(fileName, JSON.stringify(workspaceRef, null, 2));
+        await fs.writeFile(fileName, JSON.stringify(workspaceRef, null, 2));
       }
+
       if (workspaceRef.documents) {
         for (const doc of workspaceRef.documents) {
-          docById.set(doc.id, doc);
+          documentExtRefs.add(doc.id);
         }
       }
+
+      if (workspaceRef.elementExternalReferences) {
+        const extRefs = Object.values(workspaceRef.elementExternalReferences);
+        extRefs.forEach((e) => {
+          if (e && e.length > 0) {
+            e.forEach((i) => {
+              if (i.documentId) {
+                this.allDocIds.add(i.documentId);
+              }
+            });
+          }
+        });
+      }
+      if (workspaceRef.elementRevisionReferences) {
+        const extRefs = Object.values(workspaceRef.elementRevisionReferences);
+        extRefs.forEach((e) => {
+          if (e && e.length > 0) {
+            e.forEach((i) => {
+              if (i.documentId) {
+                this.allDocIds.add(i.documentId);
+              }
+            });
+          }
+        });
+      }
     }
-    return docById;
+    documentExtRefs.delete(doc.id);
+    return documentExtRefs;
   }
 
-  private async processDocument(doc: DocumentNode): Promise<boolean> {
-    if (this.processedDocs.has(doc.id)) {
+  private async writetoCsv(doc: DocumentNode) {
+    if (!this.csvWriter.isInitialized) {
+      const CSV_HEADERS = ['DocumentId', 'DocumentName', 'Description', 'FolderId ', 'FolderName', 'Outside', 'OwnerId', 'OwnerName', 'Created By', 'Modified By'];
+      await this.csvWriter.writeHeaders(CSV_HEADERS);
+    }
+
+    const line: string[] = [];
+    line.push(doc.id || 'Unknown');
+    line.push(doc.name || 'Unknown');
+    line.push(doc.description || '');
+    const folder = this.docToParent.get(doc.id);
+    const folderId = folder ? folder.id : '';
+    const folderName = folder ? folder.name : '';
+    line.push(folderId, folderName);
+    line.push(folder ? 'No' : 'Yes');
+    const docOwnerId = doc.owner && doc.owner.id ? doc.owner.id : 'Unknown';
+    const docOwnerName = doc.owner && doc.owner.name ? doc.owner.name : 'Unknown';
+    const docCreator = doc.createdBy && doc.createdBy.name ? doc.createdBy.name : 'Unknown';
+    const docModifier = doc.modifiedBy && doc.modifiedBy.name ? doc.modifiedBy.name : 'Unknown';
+    line.push(docOwnerId, docOwnerName, docCreator, docModifier);
+    await this.csvWriter.writeLine(line);
+  }
+
+  private async processDocument(input: DocumentNode | string): Promise<boolean> {
+    const docId = typeof input === 'string' ? input : input.id;
+    if (this.processedDocs.has(docId)) {
       return false;
     }
-
-    const fileName = `${OUTPUT_FOLDER}/document_${doc.id}.json`;
-    fs.writeFileSync(fileName, JSON.stringify(doc, null, 2));
-
-    LOG.info(`  Processing document id=${doc.id} ${doc.name} description=${doc.description}`);
-    this.allDocsById.set(doc.id, doc);
-    this.processedDocs.set(doc.id, doc);
-    const docById = await this.getExternalReferences(doc);
-
-    for (const doc of docById.values()) {
-      if (this.allDocsById.has(doc.id)) {
-        continue;
+    this.allDocIds.add(docId);
+    try {
+      let doc: DocumentNode = typeof input === 'string' ? null : input;
+      let foundDoc = true;
+      if (!doc) {
+        try {
+          doc = await this.apiClient.get(`api/documents/${docId}`) as DocumentNode;
+        } catch {
+          foundDoc = false;
+          doc = {
+            name: 'Unknown', id: docId
+          };
+        }
       }
-      this.allDocsById.set(doc.id, doc);
+
+      this.processedDocs.set(docId, doc);
+      await this.writetoCsv(doc);
+      if (!foundDoc) {
+        return false;
+      }
+
+      const fileName = `${OUTPUT_FOLDER}/document_${doc.id}.json`;
+      await fs.writeFile(fileName, JSON.stringify(doc, null, 2));
+
+      LOG.info(`  Processing document id = ${doc.id} ${doc.name} description = ${doc.description}`);
+      const documentExtRefs = await this.getExternalReferences(doc);
+
+      documentExtRefs.forEach((docId) => this.allDocIds.add(docId));
+      this.docToExtRef.set(doc.id, documentExtRefs);
+    } catch {
+      return false;
     }
-    this.docToExtRef.set(doc.id, Array.from(docById.values()));
     return true;
   }
 
-  private async processRemainingDocs() {
+  public async processRemainingDocs() {
     let foundMore = true;
     let passCount = 0;
     while (foundMore) {
       passCount++;
       foundMore = false;
-      LOG.info(`Process non folder document pass=${passCount}`);
-      for (const doc of this.allDocsById.values()) {
-        const unProcessed = await this.processDocument(doc);
+      LOG.info(`Process non folder document pass = ${passCount}`);
+      for (const docId of this.allDocIds.values()) {
+        const unProcessed = await this.processDocument(docId);
         foundMore = foundMore || unProcessed;
       }
     }
@@ -124,11 +170,11 @@ class SummayReport {
     try {
       folder = await this.apiClient.get(`api/folders/${folderId}`) as BasicNode;
     } catch (e) {
-      LOG.error(`Invalid folderId=${folderId}`);
+      LOG.error(`Invalid folderId = ${folderId}`);
       return;
     }
 
-    LOG.info(`Processing folder id=${folder.id} name=${folder.name}`);
+    LOG.info(`Processing folder id = ${folder.id} name = ${folder.name}`);
     this.processedFolders.set(folder.id, folder);
 
     let docRequest = `api/globaltreenodes/folder/${folderId}`;
@@ -136,17 +182,16 @@ class SummayReport {
       const nodeList = await this.apiClient.get(docRequest) as GlobalNodeList;
       for (const node of nodeList.items) {
         if (node.jsonType === DOCUMENT_SUMMARY) {
-          await this.processDocument(node);
           this.folderDocs.set(node.id, node);
           this.docToParent.set(node.id, folder);
+          this.allDocIds.add(node.id);
+          await this.processDocument(node);
         } else if (node.jsonType === FOLDER) {
           await this.processFolder(node.id);
         }
       }
       docRequest = nodeList.next;
     }
-
-    await this.processRemainingDocs();
   }
 }
 
@@ -157,9 +202,6 @@ class SummayReport {
 void async function () {
   try {
     mkdirp.sync(OUTPUT_FOLDER);
-    if (fs.existsSync(csvReport)) {
-      fs.unlinkSync(csvReport);
-    }
 
     const argv = minimist(process.argv.slice(2));
     const stackToUse: string = argv['stack'];
@@ -173,9 +215,12 @@ void async function () {
     }
 
     const apiClient = await ApiClient.createApiClient(stackToUse);
+
     const report = new SummayReport(apiClient);
 
     await report.processFolder(folderId);
+    await report.processRemainingDocs();
+
     report.printReport();
   } catch (error) {
     console.error(error);

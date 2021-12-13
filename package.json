@@ -4,7 +4,7 @@
   "description": "Examples of Onshape APIs in typescript",
   "scripts": {
     "build": "npm install && tsc",
-    "processfolder": "rm -f ./main.log && node .compiledjs/folder.js --folder"
+    "processfolder": "rm -f ./main.log && rm -rf ./output  && node .compiledjs/folder.js --folder"
   },
   "repository": {
     "type": "git",
@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/ptrajkumar/onshape-ts-client#readme",
   "dependencies": {
+    "csv-stringify": "^6.0.4",
     "log4js": "^6.3.0",
     "minimist": "^1.2.5",
     "mkdirp": "^1.0.4",

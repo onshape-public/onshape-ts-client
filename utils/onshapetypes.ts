@@ -26,8 +26,16 @@ export interface DocumentNode extends GlobalNode {
   parentId?: string;
 }
 
+export interface AElementExtRef {
+  documentId?: string;
+  versionId?: string;
+  id?: string;
+}
+
 export interface WorkspaceRef {
-  documents?: DocumentNode[];
+  documents?: BasicNode[];
+  elementExternalReferences?: Record<string, AElementExtRef[]>;
+  elementRevisionReferences?: Record<string, AElementExtRef[]>;
 }
 
 export interface GlobalNodeList {

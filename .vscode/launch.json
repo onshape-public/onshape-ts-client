@@ -14,8 +14,9 @@
       "program": "${workspaceFolder}/folder.ts",
       "args": [
         "--folder",
-        "7c93dc5cc01125252c6c2131",
-        "921c78ddb243b9905d50cd0c",
+        "9c9f6f89114f526596fce96e",
+        "--stack",
+        "member"
       ],
       "outFiles": [
         "${workspaceFolder}/**/*.js"
