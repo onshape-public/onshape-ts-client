@@ -16,8 +16,20 @@
         "--folder",
         "9c9f6f89114f526596fce96e",
         "--stack",
-        "member"
+        "owner"
       ],
+      "outFiles": [
+        "${workspaceFolder}/**/*.js"
+      ]
+    },
+    {
+      "type": "pwa-node",
+      "request": "launch",
+      "name": "Find Latest Revisions",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/revisions.ts",
       "outFiles": [
         "${workspaceFolder}/**/*.js"
       ]

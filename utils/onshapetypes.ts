@@ -44,3 +44,18 @@ export interface GlobalNodeList {
   href?: string;
   items?: GlobalNode[];
 }
+
+export interface Revision extends BasicNode {
+  partNumber: string;
+  revision: string;
+  companyId: string;
+  documentId: string;
+  versionId: string;
+  elementId: string;
+  partId?: string;
+  elementType: number;
+  configuration?: string;
+  mimeType?: string;
+  createdAt?: string;
+  viewRef?: string;
+}

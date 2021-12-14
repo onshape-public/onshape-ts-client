@@ -9,13 +9,15 @@ Clone this github repo locally and run the below command to install all the depe
 
     $ npm run build
 
+----------------------------------------------------------------------------------------------------
+
 #### Folder processor example
 First ensure you have valid **credentials.json** and run it like below
 
-    $ npm run processfolder aa8e16d5387740ee4bacad61
+    $ npm run processfolder  --folder=aa8e16d5387740ee4bacad61
 
 This application will process a folder recursively and generate of report of all documents residing in it.
-Here **aa8e16d5387740ee4bacad61** is the onshape id of the the folder. You can get this id by navigating to the folder
+Here **aa8e16d5387740ee4bacad61** is the onshape id of the folder. You can get this id by navigating to the folder
 in the webclient like so
 
     $  https://cad.onshape.com/documents?nodeId=aa8e16d5387740ee4bacad61&resourceType=folder
@@ -25,13 +27,25 @@ What the **Folder processor** does
 * Find all documents and sub folders in the specified folder
     * For each document process all of its workspaces
         * For each workspace find all externally linked documents used in it
-* Generate **references.csv** report contain all documents involved and whether any of them are not contained in the folder.
+* Generate **references.csv** report containing all documents involved and whether any of them are not contained in the folder.
 
 | DocumentId | DocumentName | Description | FolderId | FolderName | Outside
 | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- |
 | 9dccef50cd7a57d15eee4f1e  | doc1  | gear | aa8e16d5387740ee4bacad61 | folder1 | No
 | 6fcc8db39175774e7ce064ad  | doc2  | casting |  |  | Yes
 
+----------------------------------------------------------------------------------------------------
+
+#### Find Latest Revisions example
+First ensure you have valid **credentials.json** and run it like below
+
+    $ npm run findlatestrevisions  
+
+The script will generate **revisions.csv** that will contain all part numbers and their latest revisions ever released in your company.
+The API Key must be generated for a company admin as only they can enumerate all revisions. If you are member of multiple companies you can
+optionally specify a company using **--companyId=XXXX** option.
+
+----------------------------------------------------------------------------------------------------
 
 #### Storing credentials in *credentials.json*
 This sample expects api keys to make onshape api calls.  Use dev portal to generate api keys as a company admin and

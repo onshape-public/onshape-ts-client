@@ -20,7 +20,7 @@ export class CsvFileWriter {
     await this.writeLine(headers);
   }
 
-  public async writeLine(lines: string[]) {
+  public async writeLine(lines: unknown[]) {
     if (lines.length != this.headerSize) {
       throw new Error('csv fields count does not match');
     }

@@ -9,7 +9,7 @@
     "strict": true
   },
   "include": [
-    "folder.ts",
+    "*.ts",
     "./utils/*.ts",
     "./decl/*.d.ts"
   ],

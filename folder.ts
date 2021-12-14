@@ -1,8 +1,11 @@
 import { mainLog } from './utils/logger';
-import * as minimist from 'minimist';
 import { promises as fs } from 'fs';
 import { constants } from 'fs';
 import * as mkdirp from 'mkdirp';
+
+import { ArgumentParser } from './utils/argumentparser';
+import { ApiClient } from './utils/apiclient';
+import { CsvFileWriter } from './utils/csvFile';
 import {
   BasicNode,
   DocumentNode,
@@ -11,14 +14,12 @@ import {
   GlobalNodeList,
   WorkspaceRef
 } from './utils/onshapetypes';
-import { ApiClient } from './utils/apiclient';
-import { CsvFileWriter } from './utils/csvFile';
 
 const LOG = mainLog();
 const OUTPUT_FOLDER = './output';
 const csvReport = './references.csv';
 
-class SummayReport {
+class SummaryReport {
   private allDocIds = new Set<string>();
   private docToExtRef = new Map<string, Set<string>>();
   private processedDocs = new Map<string, DocumentNode>();
@@ -41,7 +42,7 @@ class SummayReport {
     const workspacesReq = `api/documents/d/${doc.id}/workspaces`;
     const workspaceList = await this.apiClient.get(workspacesReq) as BasicNode[];
     for (const workspace of workspaceList) {
-      const fileName = `${OUTPUT_FOLDER}/workspace_${workspace.id}_document_${doc.id}.json`;
+      const fileName = `${OUTPUT_FOLDER}/document_${doc.id}_workspace_${workspace.id}.json`;
       LOG.info(`    Processing workspace=${workspace.id} name=${workspace.name}`);
       let workspaceRef: WorkspaceRef = null;
 
@@ -59,30 +60,11 @@ class SummayReport {
         }
       }
 
-      if (workspaceRef.elementExternalReferences) {
-        const extRefs = Object.values(workspaceRef.elementExternalReferences);
-        extRefs.forEach((e) => {
-          if (e && e.length > 0) {
-            e.forEach((i) => {
-              if (i.documentId) {
-                this.allDocIds.add(i.documentId);
-              }
-            });
-          }
-        });
-      }
-      if (workspaceRef.elementRevisionReferences) {
-        const extRefs = Object.values(workspaceRef.elementRevisionReferences);
-        extRefs.forEach((e) => {
-          if (e && e.length > 0) {
-            e.forEach((i) => {
-              if (i.documentId) {
-                this.allDocIds.add(i.documentId);
-              }
-            });
-          }
-        });
-      }
+      [Object.values(workspaceRef.elementExternalReferences), Object.values(workspaceRef.elementRevisionReferences)]
+        .flat(2)
+        .filter((e) => !!e.documentId)
+        .map((e) => e.documentId)
+        .forEach(this.allDocIds.add);
     }
     documentExtRefs.delete(doc.id);
     return documentExtRefs;
@@ -140,7 +122,7 @@ class SummayReport {
       const fileName = `${OUTPUT_FOLDER}/document_${doc.id}.json`;
       await fs.writeFile(fileName, JSON.stringify(doc, null, 2));
 
-      LOG.info(`  Processing document id = ${doc.id} ${doc.name} description = ${doc.description}`);
+      LOG.info(`  Processing document id = ${doc.id} ${doc.name}`);
       const documentExtRefs = await this.getExternalReferences(doc);
 
       documentExtRefs.forEach((docId) => this.allDocIds.add(docId));
@@ -201,27 +183,26 @@ class SummayReport {
  */
 void async function () {
   try {
-    mkdirp.sync(OUTPUT_FOLDER);
-
-    const argv = minimist(process.argv.slice(2));
-    const stackToUse: string = argv['stack'];
-    let folderId: string = argv['folder'];
+    await mkdirp.manual(OUTPUT_FOLDER);
+    const stackToUse: string = ArgumentParser.get('stack');
+    let folderId: string = ArgumentParser.get('folder');
     if (!folderId) {
-      throw new Error('Please specify --folder as argument');
+      throw new Error('Please specify --folder=XXX as argument');
     }
+
     folderId = folderId.toString();
     if (!folderId.match(/^[0-9a-fA-F]{24}$/)) {
-      throw new Error('folder id is not a valid Onshape folderId');
+      throw new Error('folder argument is not a valid Onshape folderId');
     }
 
     const apiClient = await ApiClient.createApiClient(stackToUse);
 
-    const report = new SummayReport(apiClient);
+    const report = new SummaryReport(apiClient);
 
     await report.processFolder(folderId);
     await report.processRemainingDocs();
 
-    report.printReport();
+    await report.printReport();
   } catch (error) {
     console.error(error);
     LOG.error('Processing folder failed', error);

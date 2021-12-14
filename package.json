@@ -4,7 +4,8 @@
   "description": "Examples of Onshape APIs in typescript",
   "scripts": {
     "build": "npm install && tsc",
-    "processfolder": "rm -f ./main.log && rm -rf ./output  && node .compiledjs/folder.js --folder"
+    "processfolder": "rimraf ./main.log && rimraf ./output  && node .compiledjs/folder.js",
+    "findlatestrevisions": "rimraf ./main.log && rimraf ./output  && node .compiledjs/revisions.js"
   },
   "repository": {
     "type": "git",
@@ -22,6 +23,7 @@
     "minimist": "^1.2.5",
     "mkdirp": "^1.0.4",
     "randomstring": "^1.2.1",
+    "rimraf": "^3.0.2",
     "typescript": "^4.5.3",
     "unirest": "^0.6.0"
   },
