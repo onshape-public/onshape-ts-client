@@ -5,7 +5,7 @@
   "scripts": {
     "build": "npm install && tsc",
     "processfolder": "rimraf ./main.log && rimraf ./output  && node .compiledjs/folder.js",
-    "findlatestrevisions": "rimraf ./main.log && rimraf ./output  && node .compiledjs/revisions.js"
+    "findrevisions": "rimraf ./main.log && rimraf ./output  && node .compiledjs/revisions.js"
   },
   "repository": {
     "type": "git",

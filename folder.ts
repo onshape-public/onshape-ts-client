@@ -30,8 +30,8 @@ class SummaryReport {
 
   public async printReport() {
     LOG.info('Processed folder count=', this.processedFolders.size);
-    LOG.info('Processed doc in folder count=', this.folderDocs.size);
-    LOG.info('Processed document count=', this.processedDocs.size);
+    LOG.info('Processed document in folder count=', this.folderDocs.size);
+    LOG.info('Processed Full document count=', this.processedDocs.size);
     LOG.info('Encountered document count=', this.allDocIds.size);
   }
 
@@ -64,8 +64,9 @@ class SummaryReport {
         .flat(2)
         .filter((e) => !!e.documentId)
         .map((e) => e.documentId)
-        .forEach(this.allDocIds.add);
+        .forEach((e) => documentExtRefs.add(e));
     }
+    LOG.debug(`Document Id=${doc.id} ExternalReferences=${Array.from(documentExtRefs)}`);
     documentExtRefs.delete(doc.id);
     return documentExtRefs;
   }
@@ -127,7 +128,8 @@ class SummaryReport {
 
       documentExtRefs.forEach((docId) => this.allDocIds.add(docId));
       this.docToExtRef.set(doc.id, documentExtRefs);
-    } catch {
+    } catch (error) {
+      LOG.error(`Processing document=${docId} failed`, error);
       return false;
     }
     return true;

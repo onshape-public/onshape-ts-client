@@ -27,12 +27,16 @@ async function writetoCsv(rev: Revision) {
   ]);
 }
 
-async function findAllRevisions(apiClient: ApiClient, companyId: string) {
-  let nextBatchUri = `api/revisions/companies/${companyId}?latestOnly=true`;
+async function findAllRevisions(apiClient: ApiClient, companyId: string, findAll: boolean) {
+  const latestOnlyValue = findAll ? 'false' : 'true';
+  let nextBatchUri = `api/revisions/companies/${companyId}?latestOnly=${latestOnlyValue}`;
+  let totalRevCount = 0;
   while (nextBatchUri) {
+    LOG.info(`Calling ${nextBatchUri}`);
     const revsResponse = await apiClient.get(nextBatchUri) as GlobalNodeList;
     if (revsResponse.items) {
-      LOG.info(`Found revisions batch of = ${revsResponse.items.length}`);
+      totalRevCount += revsResponse.items.length;
+      LOG.info(`Found total revisions = ${totalRevCount}`);
       for (const rev of revsResponse.items) {
         const fileName = `${OUTPUT_FOLDER}/revision_${rev.id}.json`;
         await fs.writeFile(fileName, JSON.stringify(rev, null, 2));
@@ -50,6 +54,7 @@ void async function () {
   try {
     await mkdirp.manual(OUTPUT_FOLDER);
     const stackToUse: string = ArgumentParser.get('stack');
+    const findAll: boolean = ArgumentParser.get('all');
     let companyId: string = ArgumentParser.get('companyId');
     const apiClient = await ApiClient.createApiClient(stackToUse);
 
@@ -63,7 +68,7 @@ void async function () {
       }
       companyId = companiesInfo.items[0].id;
     }
-    await findAllRevisions(apiClient, companyId);
+    await findAllRevisions(apiClient, companyId, findAll);
   } catch (error) {
     console.error(error);
     LOG.error('Processing folder failed', error);

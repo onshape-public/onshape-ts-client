@@ -36,12 +36,15 @@ What the **Folder processor** does
 
 ----------------------------------------------------------------------------------------------------
 
-#### Find Latest Revisions example
+#### Find Revisions example
 First ensure you have valid **credentials.json** and run it like below
 
-    $ npm run findlatestrevisions  
+    $ npm run findrevisions                           # to find only the latest revsions
+    $ npm run findrevisions  --all                    # to find all revisions
 
-The script will generate **revisions.csv** that will contain all part numbers and their latest revisions ever released in your company.
+
+
+The script will generate **revisions.csv** that will contain all part numbers and their revisions ever released in your company.
 The API Key must be generated for a company admin as only they can enumerate all revisions. If you are member of multiple companies you can
 optionally specify a company using **--companyId=XXXX** option.
 
