@@ -14,7 +14,8 @@
     "sourceType": "module"
   },
   "plugins": [
-    "@typescript-eslint"
+    "@typescript-eslint",
+    "jsdoc"
   ],
   "ignorePatterns": ".compiledjs/**",
   "rules": {
@@ -44,6 +45,7 @@
     "no-unused-vars": "off",
     "space-before-function-paren": "off",
     "comma-dangle": "off",
+    "valid-jsdoc": "off",
     "@typescript-eslint/no-this-alias": "off"
   }
 }

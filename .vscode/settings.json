@@ -3,5 +3,7 @@
   "editor.formatOnSave": true,
   "search.exclude": {
     "**/node_modules": false
-  }
+  },
+  "javascript.suggest.jsdoc.generateReturns": false,
+  "typescript.suggest.jsdoc.generateReturns": false
 }

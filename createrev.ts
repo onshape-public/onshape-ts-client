@@ -19,6 +19,11 @@ import {
 const LOG = mainLog();
 const OUTPUT_FOLDER = './output';
 
+/**
+ * Release Package only releases unreleased and revision managed items.  If any of the items have errors
+ * the package transition will also fail.
+ * @param {ReleasePackageItem} rpItem An item of the package
+ */
 function isItemValidForPackage(rpItem: ReleasePackageItem): boolean {
   let hasWarnOrError = false;
   for (const error of rpItem.errors) {
@@ -40,6 +45,9 @@ function isItemValidForPackage(rpItem: ReleasePackageItem): boolean {
   return !hasWarnOrError;
 }
 
+/**
+ * Filter out all invalid items from the package and return a flat list of valid items
+ */
 function collectValidItems(rpItems: ReleasePackageItem[], input: ReleasePackageItem[] = []) {
   const filteredItems = rpItems.filter((i) => isItemValidForPackage(i));
   input.push(...filteredItems);
@@ -47,18 +55,22 @@ function collectValidItems(rpItems: ReleasePackageItem[], input: ReleasePackageI
   return input;
 }
 
+
+/**
+ * Lookup property value by its guid in a package item
+ */
 function getItemPropertyValue(item: ReleasePackageItem, propertyId: string): PROPERTY_TYPES {
   const property = item.properties.find((p) => p.propertyId === propertyId);
   return property ? property.value : null;
 }
 
-async function createSingleRevision(apiClient: ApiClient) {
+async function releaseItems(apiClient: ApiClient) {
   const docUri: string = ArgumentParser.get('docuri');
   if (!docUri) {
     throw new Error('--docuri=http://cad.onshape.com/documents/xxx argument is required');
   }
-  LOG.info(`Processing docuri=${docUri}`);
 
+  LOG.info(`Processing docuri=${docUri}`);
   let url: URL = null;
   try {
     url = new URL(docUri);
@@ -80,15 +92,16 @@ async function createSingleRevision(apiClient: ApiClient) {
   let configuration: string = url.searchParams.get('configuration') || null;
   const partId: string = ArgumentParser.get('pid');
 
+  // Use configuration from either the doc uri or input 
   const inputConfiguration: string = ArgumentParser.get('configuration');
   if (inputConfiguration) {
     if (configuration) {
-      throw new Error('--configuration should not be specified if --docuri has configuation in it');
+      throw new Error('--configuration=XXX should not be specified if --docuri has configuation as query param');
     }
     configuration = inputConfiguration;
   }
 
-  LOG.info(`documentId=${documentId}, workspaceId=${workspaceId}, versionId=${versionId}, elementId=${elementId}, partId=${partId}`);
+  LOG.info(`documentId=${documentId}, workspaceId=${workspaceId}, versionId=${versionId}, elementId=${elementId}, partId=${partId} configuration=${configuration}`);
 
   const metadataUrl = lowerCasePath.replace('/documents/', 'api/metadata/d/');
   const elementMetadata = await apiClient.get(metadataUrl) as ElementMetadata;
@@ -99,6 +112,10 @@ async function createSingleRevision(apiClient: ApiClient) {
     return;
   }
 
+  /**
+   * To create a release package you need to specify a list of top level items. If the creation is successfull
+   * each item returned will have its properties and children.
+   */
   const rpCreateBody = {
     items: [
       {
@@ -111,17 +128,22 @@ async function createSingleRevision(apiClient: ApiClient) {
       }
     ]
   };
+
   LOG.info('Creating release package with body', rpCreateBody);
   const releasePackage = await apiClient.post(`/api/releasepackages/release/${Constants.ONSHAPE_WORKFLOW_ID}`, rpCreateBody) as ReleasePackage;
 
   await fs.writeFile(`${OUTPUT_FOLDER}/rp_create_${releasePackage.id}.json`, JSON.stringify(releasePackage, null, 2));
 
+  // To transition we need flatter the item and its children and only include revision managed and not already released items
   const items = collectValidItems(releasePackage.items);
   if (items.length === 0) {
     throw new Error(`No items found to release in rpId=${releasePackage.id}`);
   }
 
   LOG.info('Items left to release count=', items.length);
+
+  // This is the basic post body for transitioning a package. You need to specify any package properties
+  // and all items in a flat list with only properties that you intend to change
   const releaseBody = {
     properties: [] as PropertyUpdate[],
     items: [] as ReleasePackageItemUpdate[]
@@ -142,6 +164,7 @@ async function createSingleRevision(apiClient: ApiClient) {
     const revision = getItemPropertyValue(item, Constants.REVISION_ID);
     LOG.info(`On Item=${item.id} found name=${name} partNumber="${partNumber}" revision="${revision}"`);
 
+    // Override if input revision if needed
     const revisionToRelease = ArgumentParser.get('revision') as PROPERTY_TYPES || revision;
     if (!revisionToRelease) {
       throw new Error(`Failed to determine revision for Item=${item.id}`);
@@ -149,7 +172,7 @@ async function createSingleRevision(apiClient: ApiClient) {
     itemUpdate.properties.push({ propertyId: Constants.REVISION_ID, value: revisionToRelease });
     const partNumberToUse = ArgumentParser.get('partnumber') as PROPERTY_TYPES || partNumber;
     if (!partNumberToUse) {
-      throw new Error(`Failed to determine partNumber for Item=${item.id}`);
+      throw new Error(`Failed to determine partNumber for Item=${item.id} name=${name}`);
     }
     if (partNumberToUse !== partNumber) {
       itemUpdate.properties.push({ propertyId: Constants.PART_NUMBER_ID, value: partNumberToUse });
@@ -159,7 +182,7 @@ async function createSingleRevision(apiClient: ApiClient) {
 
   let releaseName: string = ArgumentParser.get('releasename');
   if (!releaseName) {
-    if (versionId) {
+    if (versionId) { // If name is not specified and we are releasing a version use the version name
       const versionInfo = await apiClient.get(`api/documents/d/${documentId}/versions/${versionId}`) as BasicNode;
       releaseName = versionInfo.name;
     }
@@ -182,7 +205,7 @@ void async function () {
     await mkdirp.manual(OUTPUT_FOLDER);
     const stackToUse: string = ArgumentParser.get('stack');
     const apiClient = await ApiClient.createApiClient(stackToUse);
-    await createSingleRevision(apiClient);
+    await releaseItems(apiClient);
   } catch (error) {
     console.error(error);
     LOG.error('Processing folder failed', error);

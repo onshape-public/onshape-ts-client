@@ -49,7 +49,8 @@ The script will generate **revisions.csv** that will contain all part numbers an
 ## Programmatic Revision Creation
 
 This is will create a release package for specified version and elementId and do a release. For
-the release to be successful part numbers must be pre-assigned to all items.
+the release to be successful part numbers must be pre-assigned to all items. Use **extreme caution**
+while running this script as creating a revision is not undoable.
 
     $ npm run createrevision  --docuri='https://cad.onshape.com/documents/9f4add5034da1df0c2d028e5/v/4e858b7f13995eac3612aca6/e/d71a3248320c779e3d24ac48'
 
