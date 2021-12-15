@@ -1,6 +1,6 @@
 {
   "env": {
-    "browser": true,
+    "node": true,
     "es2021": true
   },
   "extends": [
@@ -38,8 +38,10 @@
       "error",
       "always"
     ],
+    "no-template-curly-in-string": "error",
     "require-jsdoc": "off",
     "max-len": "off",
+    "no-unused-vars": "off",
     "space-before-function-paren": "off",
     "comma-dangle": "off",
     "@typescript-eslint/no-this-alias": "off"

@@ -3,7 +3,7 @@ import { configure, getLogger, Logger } from 'log4js';
 configure({
   appenders: {
     everything: { type: 'stdout' },
-    main: { type: 'file', filename: 'main.log', maxLogSize: 1048576, backups: 3, append: false },
+    main: { type: 'file', filename: 'main.log', flags: 'w' },
     infofilter: { type: 'logLevelFilter', appender: 'everything', level: 'info' }
   },
   categories: { default: { appenders: ['main', 'infofilter'], level: 'all' } }

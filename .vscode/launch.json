@@ -31,6 +31,23 @@
       "outFiles": [
         "${workspaceFolder}/**/*.js"
       ]
+    },
+    {
+      "type": "pwa-node",
+      "request": "launch",
+      "name": "Create Revision",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "preLaunchTask": "clean_outputdir",
+      "program": "${workspaceFolder}/createrev.ts",
+      "args": [
+        "--stack=owner",
+        "--docuri=http://localhost.dev.onshape.com:8080/documents/80329be076b1a2cb4e980950/v/6781af026b7306e0a437946f/e/c389aca3e1326d62914be849"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/**/*.js"
+      ]
     }
   ]
 }

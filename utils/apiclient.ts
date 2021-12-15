@@ -5,11 +5,14 @@ import { constants } from 'fs';
 import * as unirest from 'unirest';
 import { IUniResponse, IUniRest } from 'unirest';
 import { mainLog } from './logger';
+import { ArgumentParser } from './argumentparser';
+import { GlobalNodeList } from './onshapetypes';
 
 const LOG = mainLog();
 
 interface StackCredential {
   url: string;
+  companyId?: string;
   accessKey: string;
   secretKey: string;
 }
@@ -18,7 +21,7 @@ export class ApiClient {
   private baseURL: string = null;
   private accessKey: string = null;
   private secretKey: string = null;
-
+  private companyId: string = null;
   public static async createApiClient(stackToUse?: string): Promise<ApiClient> {
     const credentialsFilePath = './credentials.json';
     try {
@@ -58,7 +61,26 @@ export class ApiClient {
     }
 
     const apiClient = new ApiClient(credsToUse.url, credsToUse.accessKey, credsToUse.secretKey);
+    apiClient.companyId = credsToUse.companyId || null;
     return apiClient;
+  }
+
+  public async findCompanyId(): Promise<string> {
+    let companyId: string = ArgumentParser.get('companyId');
+    if (!companyId) {
+      if (this.companyId) {
+        return this.companyId;
+      }
+      const companiesInfo = await this.get('/api/companies') as GlobalNodeList;
+      const companyCount = companiesInfo.items && companiesInfo.items.length || 0;
+      if (companyCount == 0) {
+        throw new Error('No company membership found');
+      } else if (companyCount > 1) {
+        throw new Error('User is member of mutliple companies. Please specify --companyId=XXXX as argument');
+      }
+      companyId = companiesInfo.items[0].id;
+    }
+    return companyId;
   }
 
   public async post(apiRelativePath: string, bodyData: unknown): Promise<unknown> {
@@ -100,8 +122,7 @@ export class ApiClient {
     return new Promise(function (resolve, reject) {
       const lunitest = self.getSignedUnirest(fullUri, verb);
       if (bodyData) {
-        lunitest.type('json')
-          .header('Accept', 'application/json')
+        lunitest
           .send(bodyData)
           .timeout(600000);
       }
@@ -173,7 +194,7 @@ export class ApiClient {
     lunitest.header('On-Nonce', onNonce);
     lunitest.header('Date', authDate);
     lunitest.header('Authorization', asign);
-    lunitest.header('Accept', 'application/vnd.onshape.v1+json,application/json');
+    lunitest.header('Accept', 'application/vnd.onshape.v2+json;charset=UTF-8;qs=0.2');
     return lunitest;
   }
 }

@@ -55,19 +55,8 @@ void async function () {
     await mkdirp.manual(OUTPUT_FOLDER);
     const stackToUse: string = ArgumentParser.get('stack');
     const findAll: boolean = ArgumentParser.get('all');
-    let companyId: string = ArgumentParser.get('companyId');
     const apiClient = await ApiClient.createApiClient(stackToUse);
-
-    if (!companyId) {
-      const companiesInfo = await apiClient.get('/api/companies') as GlobalNodeList;
-      const companyCount = companiesInfo.items && companiesInfo.items.length || 0;
-      if (companyCount == 0) {
-        throw new Error('No company membership found');
-      } else if (companyCount > 1) {
-        throw new Error('User is member of mutliple companies. Please specify --companyId=XXXX as argument');
-      }
-      companyId = companiesInfo.items[0].id;
-    }
+    const companyId: string = await apiClient.findCompanyId();
     await findAllRevisions(apiClient, companyId, findAll);
   } catch (error) {
     console.error(error);

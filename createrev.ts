@@ -1,0 +1,190 @@
+import { promises as fs } from 'fs';
+import * as mkdirp from 'mkdirp';
+import { mainLog } from './utils/logger';
+import { ArgumentParser } from './utils/argumentparser';
+import { ApiClient } from './utils/apiclient';
+import {
+  BasicNode,
+  Constants,
+  ElementMetadata,
+  ElementType,
+  ErrorSeverity,
+  PropertyUpdate,
+  PROPERTY_TYPES,
+  ReleasePackage,
+  ReleasePackageItem,
+  ReleasePackageItemUpdate
+} from './utils/onshapetypes';
+
+const LOG = mainLog();
+const OUTPUT_FOLDER = './output';
+
+function isItemValidForPackage(rpItem: ReleasePackageItem): boolean {
+  let hasWarnOrError = false;
+  for (const error of rpItem.errors) {
+    LOG.info(`itemId=${rpItem.id} has message="${error.message}"`);
+    if (error.severity > ErrorSeverity.INFO) {
+      hasWarnOrError = true;
+    }
+  }
+
+  const properties = rpItem.properties;
+  const nrmProperty = properties.find((p) => p.propertyId === Constants.NOT_REVISION_MANAGED_ID);
+  if (nrmProperty && nrmProperty.value === true) {
+    return false;
+  }
+  const isIncluded = properties.find((p) => p.propertyId === Constants.INCLUDED_IN_RELEASE_PACKAGE_PROPERTY_ID);
+  if (isIncluded && isIncluded.value === false) {
+    return false;
+  }
+  return !hasWarnOrError;
+}
+
+function collectValidItems(rpItems: ReleasePackageItem[], input: ReleasePackageItem[] = []) {
+  const filteredItems = rpItems.filter((i) => isItemValidForPackage(i));
+  input.push(...filteredItems);
+  filteredItems.forEach((i) => collectValidItems(i.children, input));
+  return input;
+}
+
+function getItemPropertyValue(item: ReleasePackageItem, propertyId: string): PROPERTY_TYPES {
+  const property = item.properties.find((p) => p.propertyId === propertyId);
+  return property ? property.value : null;
+}
+
+async function createSingleRevision(apiClient: ApiClient) {
+  const docUri: string = ArgumentParser.get('docuri');
+  if (!docUri) {
+    throw new Error('--docuri=http://cad.onshape.com/documents/xxx argument is required');
+  }
+  LOG.info(`Processing docuri=${docUri}`);
+
+  let url: URL = null;
+  try {
+    url = new URL(docUri);
+  } catch (error) {
+    throw new Error(`Failed to parse ${docUri} as valid URL`);
+  }
+
+  const lowerCasePath = url.pathname.toLowerCase();
+  const regexMatch = lowerCasePath.match(/^\/documents\/([0-9a-f]{24})\/([wv])\/([0-9a-f]{24})\/e\/([0-9a-f]{24})$/);
+  if (!regexMatch) {
+    throw new Error(`Failed to extract documentId and elementId from ${lowerCasePath}`);
+  }
+
+  const documentId: string = regexMatch[1];
+  const wv = regexMatch[2];
+  const workspaceId: string = wv == 'w' ? regexMatch[3] : null;
+  const versionId: string = wv == 'v' ? regexMatch[3] : null;
+  const elementId: string = regexMatch[4];
+  let configuration: string = url.searchParams.get('configuration') || null;
+  const partId: string = ArgumentParser.get('pid');
+
+  const inputConfiguration: string = ArgumentParser.get('configuration');
+  if (inputConfiguration) {
+    if (configuration) {
+      throw new Error('--configuration should not be specified if --docuri has configuation in it');
+    }
+    configuration = inputConfiguration;
+  }
+
+  LOG.info(`documentId=${documentId}, workspaceId=${workspaceId}, versionId=${versionId}, elementId=${elementId}, partId=${partId}`);
+
+  const metadataUrl = lowerCasePath.replace('/documents/', 'api/metadata/d/');
+  const elementMetadata = await apiClient.get(metadataUrl) as ElementMetadata;
+  await fs.writeFile(`${OUTPUT_FOLDER}/metadata_${elementId}.json`, JSON.stringify(elementMetadata, null, 2));
+
+  if (elementMetadata.elementType === ElementType.PARTSTUDIO && !partId) {
+    LOG.error('--pid=xxx needs to be specified for PARTSTUDIO');
+    return;
+  }
+
+  const rpCreateBody = {
+    items: [
+      {
+        documentId: documentId,
+        workspaceId: workspaceId,
+        versionId: versionId,
+        elementId: elementId,
+        partId: partId,
+        configuration: configuration
+      }
+    ]
+  };
+  LOG.info('Creating release package with body', rpCreateBody);
+  const releasePackage = await apiClient.post(`/api/releasepackages/release/${Constants.ONSHAPE_WORKFLOW_ID}`, rpCreateBody) as ReleasePackage;
+
+  await fs.writeFile(`${OUTPUT_FOLDER}/rp_create_${releasePackage.id}.json`, JSON.stringify(releasePackage, null, 2));
+
+  const items = collectValidItems(releasePackage.items);
+  if (items.length === 0) {
+    throw new Error(`No items found to release in rpId=${releasePackage.id}`);
+  }
+
+  LOG.info('Items left to release count=', items.length);
+  const releaseBody = {
+    properties: [] as PropertyUpdate[],
+    items: [] as ReleasePackageItemUpdate[]
+  };
+
+  for (const item of items) {
+    const itemUpdate: ReleasePackageItemUpdate = {
+      id: item.id,
+      href: item.href,
+      documentId: item.documentId,
+      workspaceId: item.workspaceId,
+      versionId: item.versionId,
+      elementId: item.elementId,
+      properties: [] as PropertyUpdate[]
+    };
+    const name = getItemPropertyValue(item, Constants.NAME_ID);
+    const partNumber = getItemPropertyValue(item, Constants.PART_NUMBER_ID);
+    const revision = getItemPropertyValue(item, Constants.REVISION_ID);
+    LOG.info(`On Item=${item.id} found name=${name} partNumber="${partNumber}" revision="${revision}"`);
+
+    const revisionToRelease = ArgumentParser.get('revision') as PROPERTY_TYPES || revision;
+    if (!revisionToRelease) {
+      throw new Error(`Failed to determine revision for Item=${item.id}`);
+    }
+    itemUpdate.properties.push({ propertyId: Constants.REVISION_ID, value: revisionToRelease });
+    const partNumberToUse = ArgumentParser.get('partnumber') as PROPERTY_TYPES || partNumber;
+    if (!partNumberToUse) {
+      throw new Error(`Failed to determine partNumber for Item=${item.id}`);
+    }
+    if (partNumberToUse !== partNumber) {
+      itemUpdate.properties.push({ propertyId: Constants.PART_NUMBER_ID, value: partNumberToUse });
+    }
+    releaseBody.items.push(itemUpdate);
+  }
+
+  let releaseName: string = ArgumentParser.get('releasename');
+  if (!releaseName) {
+    if (versionId) {
+      const versionInfo = await apiClient.get(`api/documents/d/${documentId}/versions/${versionId}`) as BasicNode;
+      releaseName = versionInfo.name;
+    }
+  }
+  releaseBody.properties.push(
+    { propertyId: Constants.RP_NAME_ID, value: releaseName || 'Automated Release' }
+  );
+  releaseBody.properties.push(
+    { propertyId: Constants.RP_NOTES_ID, value: `Released by createrev.ts on ${new Date().toString()}` }
+  );
+
+  LOG.info(`Doing CREATE_AND_RELEASE for rpId=${releasePackage.id}`, JSON.stringify(releaseBody, null, 2));
+  const releaseResponse = await apiClient.post(`/api/releasepackages/${releasePackage.id}?wfaction=CREATE_AND_RELEASE`, releaseBody);
+  await fs.writeFile(`${OUTPUT_FOLDER}/rp_transition_${releasePackage.id}.json`, JSON.stringify(releaseResponse, null, 2));
+  LOG.info('CREATE_AND_RELEASE Was success');
+}
+
+void async function () {
+  try {
+    await mkdirp.manual(OUTPUT_FOLDER);
+    const stackToUse: string = ArgumentParser.get('stack');
+    const apiClient = await ApiClient.createApiClient(stackToUse);
+    await createSingleRevision(apiClient);
+  } catch (error) {
+    console.error(error);
+    LOG.error('Processing folder failed', error);
+  }
+}();
