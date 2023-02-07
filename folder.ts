@@ -1,11 +1,10 @@
-import { mainLog } from './utils/logger';
 import { promises as fs } from 'fs';
 import { constants } from 'fs';
-import * as mkdirp from 'mkdirp';
-
-import { ArgumentParser } from './utils/argumentparser';
-import { ApiClient } from './utils/apiclient';
-import { CsvFileWriter } from './utils/csvFile';
+import { mainLog } from './utils/logger.js';
+import { FolderType, getFolderPath } from './utils/fileutils.js';
+import { ArgumentParser } from './utils/argumentparser.js';
+import { ApiClient } from './utils/apiclient.js';
+import { writeDocumentReferences } from './utils/csvFile.js';
 import {
   BasicNode,
   DocumentNode,
@@ -13,11 +12,10 @@ import {
   FOLDER,
   GlobalNodeList,
   WorkspaceRef
-} from './utils/onshapetypes';
+} from './utils/onshapetypes.js';
 
 const LOG = mainLog();
-const OUTPUT_FOLDER = './output';
-const csvReport = './references.csv';
+const OUTPUT_FOLDER = getFolderPath(FolderType.OUTPUT);
 
 class SummaryReport {
   private allDocIds = new Set<string>();
@@ -26,7 +24,6 @@ class SummaryReport {
   private processedFolders = new Map<string, BasicNode>();
   private docToParent = new Map<string, BasicNode>();
   private folderDocs = new Map<string, DocumentNode>();
-  private csvWriter = new CsvFileWriter(csvReport);
 
   public async printReport() {
     LOG.info('Processed folder count=', this.processedFolders.size);
@@ -72,26 +69,19 @@ class SummaryReport {
   }
 
   private async writetoCsv(doc: DocumentNode) {
-    if (!this.csvWriter.isInitialized) {
-      const CSV_HEADERS = ['DocumentId', 'DocumentName', 'Description', 'FolderId ', 'FolderName', 'Outside', 'OwnerId', 'OwnerName', 'Created By', 'Modified By'];
-      await this.csvWriter.writeHeaders(CSV_HEADERS);
-    }
-
-    const line: string[] = [];
-    line.push(doc.id || 'Unknown');
-    line.push(doc.name || 'Unknown');
-    line.push(doc.description || '');
+    const aDocument: Record<string, unknown> = {};
+    aDocument.id = doc.id || 'Unknown';
+    aDocument.name = doc.name || 'Unknown';
+    aDocument.description = doc.description || '';
     const folder = this.docToParent.get(doc.id);
-    const folderId = folder ? folder.id : '';
-    const folderName = folder ? folder.name : '';
-    line.push(folderId, folderName);
-    line.push(folder ? 'No' : 'Yes');
-    const docOwnerId = doc.owner && doc.owner.id ? doc.owner.id : 'Unknown';
-    const docOwnerName = doc.owner && doc.owner.name ? doc.owner.name : 'Unknown';
-    const docCreator = doc.createdBy && doc.createdBy.name ? doc.createdBy.name : 'Unknown';
-    const docModifier = doc.modifiedBy && doc.modifiedBy.name ? doc.modifiedBy.name : 'Unknown';
-    line.push(docOwnerId, docOwnerName, docCreator, docModifier);
-    await this.csvWriter.writeLine(line);
+    aDocument.folderId = folder ? folder.id : '';
+    aDocument.folderName = folder ? folder.name : '';
+    aDocument.outSide = folder ? 'No' : 'Yes';
+    aDocument.docOwnerId = doc.owner && doc.owner.id ? doc.owner.id : 'Unknown';
+    aDocument.docOwnerName = doc.owner && doc.owner.name ? doc.owner.name : 'Unknown';
+    aDocument.docCreator = doc.createdBy && doc.createdBy.name ? doc.createdBy.name : 'Unknown';
+    aDocument.docModifier = doc.modifiedBy && doc.modifiedBy.name ? doc.modifiedBy.name : 'Unknown';
+    await writeDocumentReferences(aDocument);
   }
 
   private async processDocument(input: DocumentNode | string): Promise<boolean> {
@@ -180,33 +170,27 @@ class SummaryReport {
 }
 
 
-/**
- * This is the main entry point
- */
-void async function () {
-  try {
-    await mkdirp.manual(OUTPUT_FOLDER);
-    const stackToUse: string = ArgumentParser.get('stack');
-    let folderId: string = ArgumentParser.get('folder');
-    if (!folderId) {
-      throw new Error('Please specify --folder=XXX as argument');
-    }
-
-    folderId = folderId.toString();
-    if (!folderId.match(/^[0-9a-fA-F]{24}$/)) {
-      throw new Error('folder argument is not a valid Onshape folderId');
-    }
-
-    const apiClient = await ApiClient.createApiClient(stackToUse);
-
-    const report = new SummaryReport(apiClient);
-
-    await report.processFolder(folderId);
-    await report.processRemainingDocs();
-
-    await report.printReport();
-  } catch (error) {
-    console.error(error);
-    LOG.error('Processing folder failed', error);
+try {
+  const stackToUse: string = ArgumentParser.get('stack');
+  let folderId: string = ArgumentParser.get('folder');
+  if (!folderId) {
+    throw new Error('Please specify --folder=XXX as argument');
   }
-}();
+
+  folderId = folderId.toString();
+  if (!folderId.match(/^[0-9a-fA-F]{24}$/)) {
+    throw new Error('folder argument is not a valid Onshape folderId');
+  }
+
+  const apiClient = await ApiClient.createApiClient(stackToUse);
+
+  const report = new SummaryReport(apiClient);
+
+  await report.processFolder(folderId);
+  await report.processRemainingDocs();
+
+  await report.printReport();
+} catch (error) {
+  console.error(error);
+  LOG.error('Processing folder failed', error);
+}

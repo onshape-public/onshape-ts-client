@@ -1,8 +1,9 @@
 node_modules/
 .compiledjs/
 output/
+logs/
+exports/
+reports/
 package-lock.json
 .DS_Store
-*.log
-*.csv
 credentials.json

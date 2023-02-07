@@ -1,12 +1,12 @@
-import * as randomstring from 'randomstring';
-import * as crypto from 'crypto';
+import randomstring from 'randomstring';
+import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import { constants } from 'fs';
-import * as unirest from 'unirest';
+import unirest from 'unirest';
 import { IUniResponse, IUniRest } from 'unirest';
-import { mainLog } from './logger';
-import { ArgumentParser } from './argumentparser';
-import { GlobalNodeList } from './onshapetypes';
+import { mainLog } from './logger.js';
+import { ArgumentParser } from './argumentparser.js';
+import { CompanyInfo, ListResponse } from './onshapetypes.js';
 
 const LOG = mainLog();
 
@@ -17,11 +17,15 @@ interface StackCredential {
   secretKey: string;
 }
 
+/**
+ * A simple Onshape API client that uses api keys to make REST calls against any onshape stack.
+ */
 export class ApiClient {
   private baseURL: string = null;
   private accessKey: string = null;
   private secretKey: string = null;
   private companyId: string = null;
+
   public static async createApiClient(stackToUse?: string): Promise<ApiClient> {
     const credentialsFilePath = './credentials.json';
     try {
@@ -65,22 +69,20 @@ export class ApiClient {
     return apiClient;
   }
 
-  public async findCompanyId(): Promise<string> {
-    let companyId: string = ArgumentParser.get('companyId');
-    if (!companyId) {
-      if (this.companyId) {
-        return this.companyId;
-      }
-      const companiesInfo = await this.get('/api/companies') as GlobalNodeList;
-      const companyCount = companiesInfo.items && companiesInfo.items.length || 0;
-      if (companyCount == 0) {
-        throw new Error('No company membership found');
-      } else if (companyCount > 1) {
-        throw new Error('User is member of mutliple companies. Please specify --companyId=XXXX as argument');
-      }
-      companyId = companiesInfo.items[0].id;
+  public async findCompanyInfo(): Promise<CompanyInfo> {
+    const companiesResponse = await this.get('/api/companies') as ListResponse<CompanyInfo>;
+    let allCompanies = companiesResponse?.items || [];
+    const companyId: string = ArgumentParser.get('companyId') || this.companyId;
+    if (companyId) {
+      allCompanies = allCompanies.filter(c => c.id === companyId);
     }
-    return companyId;
+    const companyCount = allCompanies.length;
+    if (companyCount == 0) {
+      throw new Error('No company membership found');
+    } else if (companyCount > 1) {
+      throw new Error('User is member of multiple companies. Please specify --companyId=XXXX as argument');
+    }
+    return allCompanies[0];
   }
 
   public async post(apiRelativePath: string, bodyData: unknown): Promise<unknown> {
@@ -91,6 +93,32 @@ export class ApiClient {
   public async get(apiRelativePath: string): Promise<unknown> {
     await this.avoidApiLimit();
     return await this.callApiVerb(apiRelativePath, 'GET');
+  }
+
+  public async delete(apiRelativePath: string): Promise<unknown> {
+    await this.avoidApiLimit();
+    return await this.callApiVerb(apiRelativePath, 'DELETE');
+  }
+
+  public async downloadFile(apiRelativePath: string, filePath: string) {
+    await this.avoidApiLimit();
+    const self = this;
+    const fullUri = apiRelativePath.startsWith('http') ? apiRelativePath : self.baseURL + apiRelativePath;
+    return new Promise(function (resolve, reject) {
+      LOG.debug(`Downloading ${fullUri} to ${filePath}`);
+      const downloadreq = self.getSignedUnirest(fullUri, 'GET');
+      downloadreq
+        .encoding('binary')
+        .timeout(600000)
+        .end(function (response: IUniResponse) {
+          if (self.isStatusCodeBad(response.statusCode)) {
+            reject(new Error('Failed with status code ' + response.statusCode));
+          } else {
+            fs.writeFile(filePath, response.raw_body, 'binary');
+            resolve('done');
+          }
+        });
+    });
   }
 
   private constructor(baseURL: string, accessKey: string, secretKey: string) {
@@ -118,7 +146,7 @@ export class ApiClient {
   private async callApiVerb(apiRelativePath: string, verb: string, bodyData?: unknown): Promise<unknown> {
     const self = this;
     const fullUri = apiRelativePath.startsWith('http') ? apiRelativePath : new URL(apiRelativePath, this.baseURL).toString();
-    LOG.debug(`Calling ${verb} ${fullUri}`);
+    LOG.info(`Calling ${verb} ${fullUri}`);
     return new Promise(function (resolve, reject) {
       const lunitest = self.getSignedUnirest(fullUri, verb);
       if (bodyData) {

@@ -1,13 +1,18 @@
 
 export interface BasicNode {
   id: string;
-  name: string;
+  name?: string;
   description?: string;
   href?: string;
 }
 
 export interface NodeOwner extends BasicNode {
   type: number;
+}
+
+export interface CompanyInfo extends BasicNode {
+  admin: boolean;
+  domainPrefix?: string;
 }
 
 export const DOCUMENT_SUMMARY = 'document-summary';
@@ -38,11 +43,14 @@ export interface WorkspaceRef {
   elementRevisionReferences?: Record<string, AElementExtRef[]>;
 }
 
-export interface GlobalNodeList {
+export interface ListResponse<Type> {
   previous?: string;
   next?: string;
   href?: string;
-  items?: GlobalNode[];
+  items?: Type[];
+}
+
+export interface GlobalNodeList extends ListResponse<GlobalNode & Record<string, string | number | boolean>> {
 }
 
 export interface Revision extends BasicNode {
@@ -53,7 +61,7 @@ export interface Revision extends BasicNode {
   versionId: string;
   elementId: string;
   partId?: string;
-  elementType: number;
+  elementType: ElementType;
   configuration?: string;
   mimeType?: string;
   createdAt?: string;
@@ -94,6 +102,7 @@ export interface MetadataProperty {
 }
 
 export interface ElementMetadata {
+  parts?: { items?: Record<string, string>[] };
   href: string;
   mimeType?: string;
   elementType: ElementType;

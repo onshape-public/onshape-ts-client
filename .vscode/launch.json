@@ -5,45 +5,80 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "pwa-node",
+      "name": "Stack Webhook Sample",
+      "console": "integratedTerminal",
+      "program": "${workspaceFolder}/.compiledjs/webhook.js",
+      "args": [
+        "--stack=clexcorp",
+        "--ngrok"
+      ],
+      "request": "launch",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "type": "node"
+    },
+    {
+      "name": "Local Webhook Sample",
+      "console": "integratedTerminal",
+      "program": "${workspaceFolder}/.compiledjs/webhook.js",
+      "args": [
+        "--stack=ramcomember",
+        "--documentId=6ba7732e73a998f5c81bdda0",
+        "--webhookuri=http://localhost.onshape.io:9191/onshapeevents",
+      ],
+      "request": "launch",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "type": "node"
+    },
+    {
+      "type": "node",
       "request": "launch",
       "name": "Process Folders",
+      "console": "integratedTerminal",
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/folder.ts",
+      "program": "${workspaceFolder}/.compiledjs/folder.js",
       "args": [
-        "--folder",
-        "7c93dc5cc01125252c6c2131"
+        "--stack=clexcorp",
+        "--folder=417e12b081a7719da1d38d1b",
       ],
       "outFiles": [
         "${workspaceFolder}/**/*.js"
       ]
     },
     {
-      "type": "pwa-node",
+      "type": "node",
       "request": "launch",
       "name": "Find Latest Revisions",
+      "console": "integratedTerminal",
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/revisions.ts",
+      "program": "${workspaceFolder}/.compiledjs/revisions.js",
+      "args": [
+        "--stack=clexcorp"
+      ],
       "outFiles": [
         "${workspaceFolder}/**/*.js"
       ]
     },
     {
-      "type": "pwa-node",
+      "type": "node",
       "request": "launch",
       "name": "Create Revision",
+      "console": "integratedTerminal",
       "skipFiles": [
         "<node_internals>/**"
       ],
       "preLaunchTask": "clean_outputdir",
-      "program": "${workspaceFolder}/createrev.ts",
+      "program": "${workspaceFolder}/.compiledjs/createrev.js",
       "args": [
-        "--stack=owner",
-        "--docuri=http://localhost.dev.onshape.com:8080/documents/80329be076b1a2cb4e980950/v/6781af026b7306e0a437946f/e/c389aca3e1326d62914be849"
+        "--stack=clexcorp",
+        "--docuri=https://clexcorp.onshape.com/documents/9a157ab732ea334a1c28b418/w/b964d261df257d9d57ae9548/e/1d505172c279300cb287efed"
       ],
       "outFiles": [
         "${workspaceFolder}/**/*.js"

@@ -29,12 +29,10 @@ What the **Folder processor** does
 * Find all documents and sub folders in the specified folder
     * For each document process all of its workspaces
         * For each workspace find all externally linked documents used in it
-* Generate **references.csv** report containing all documents involved and whether any of them are not contained in the folder.
+* Generate **./reports/folder/references.csv** report containing all documents involved and whether any of them are not contained in the folder.
 
-| DocumentId | DocumentName | Description | FolderId | FolderName | Outside
-| ------------- | ------------- | ------------- | ------------- | ------------- | ------------- |
-| 9dccef50cd7a57d15eee4f1e  | doc1  | gear | aa8e16d5387740ee4bacad61 | folder1 | No
-| 6fcc8db39175774e7ce064ad  | doc2  | casting |  |  | Yes
+![Folder References](images/folder_references.jpg "Folder References")
+
 
 ----------------------------------------------------------------------------------------------------
 
@@ -42,13 +40,15 @@ What the **Folder processor** does
     $ npm run findrevisions                           # to find only the latest revsions
     $ npm run findrevisions  --all                    # to find all revisions
 
-The script will generate **revisions.csv** that will contain all part numbers and their revisions ever released in your company. The API Key must be generated for a company admin as only they can enumerate all revisions. 
+The script will generate **./reports/revisions/revisions.csv** that will contain all part numbers and their revisions ever released in your company. The API Key must be generated for a company admin as only they can enumerate all revisions.
+
+![Revisions](images/revisions.jpg "Revisions")
 
 ----------------------------------------------------------------------------------------------------
 
 ## Programmatic Revision Creation
 
-This is will create a release package for specified version and elementId and do a release. For
+This script will create a release package for specified version and elementId and do a release. For
 the release to be successful part numbers must be pre-assigned to all items. Use **extreme caution**
 while running this script as creating a revision is not undoable.
 
@@ -59,15 +59,15 @@ while running this script as creating a revision is not undoable.
 
 This parameter is required and you need to have WRITE access to release the element.
 
-> ---pid='JHD' 
+> ---pid='JHD'
 
 If you are releasing a part you will also need to specify its id.
 
-> --configuration='XXX' 
+> --configuration='XXX'
 
 The right configuration for the assembly/part studio. This can also be part of the docuri search paramrs
 
-> --revision=F 
+> --revision=F
 
 By default the next valid revision will be used. You can use this option to skip revisions.
 
@@ -82,9 +82,59 @@ If you a releasing an existing version, its name is used. Otherwise you can spec
 
 ----------------------------------------------------------------------------------------------------
 
+## Webhooks example
+
+This examples illustrates how to listen to onshape notifications via webhooks. It will listen to these events.
+
+*  `onshape.revision.created` Fired for every revision created
+*  `onshape.model.lifecycle.createversion` Fired for every new version saved
+*  `onshape.model.translation.complete` Fired when translations are completed
+*  `onshape.workflow.transition` Fired when workflowables objects like Releases are tranistioned
+
+Simply run the following command
+
+    $ node ./.compiledjs/webhook.js
+    $ node ./.compiledjs/webhook.js --documentId=9a157ab732ea334a1c28b418 # If not running as a company admin
+
+It does so by running a http server and exposing http://localhost:9191/onshapeevents via either ngrok or localtunnel to cad.onshape.com
+
+### What it does:
+
+* Saves every new version in `./reports/webhook/versions.csv`
+* Saves every release package transition in `./reports/webhook/release_packages.csv`
+* Export every released part as STEP format and save in `./exports/webhook` using the polling mechanism
+* Export every released drawing as PDF format and save in `./exports/webhook` using the `onshape.model.translation.complete` webhook event
+
+###### Supported options
+> ---webhookuri='https://yourserver.com/onshapeevents'
+
+The webhook URL that should be publicly accessible from cad.onshape.com. Only use it if you can expose
+your http://localhost:9191/onshapeevents publicly as https://yourserver.com/onshapeevents
+
+> ---port=9191
+
+The port on local host to run the node express server to listen for webhook notifications.
+
+> --ngrok
+
+Use https://ngrok.com/ free tunneling service to expose your local computer to outside
+
+> --localtunnel
+
+Use https://localtunnel.me/ free tunneling service to expose your local computer to outside
+
+> --documentId=9a157ab732ea334a1c28b418
+
+By default the sample tries to install a company level webhook. If you are not a company admin you need to
+specify a documentId to listen to only webhook events pertaining to the document you have access to.
+
+
+----------------------------------------------------------------------------------------------------
+
+
 #### Storing credentials in *credentials.json*
 This sample expects api keys to make onshape api calls.  Use dev portal to generate api keys as a company admin and
-save in this format in the same folder as **credentials.json** 
+save in this format in the same folder as **credentials.json**
 
     {
         "cad": {
@@ -96,15 +146,15 @@ save in this format in the same folder as **credentials.json**
 
 #### Logging
 
-The application logs both to console and a file called main.log. Both of these can be configured by **utils/logger.ts**
+The application logs both to console and a file called **logs/scriptname.log** . Both of these can be configured by **utils/logger.ts**
 Refer to [log4js](https://log4js-node.github.io/log4js-node/) for additional logging configurations
 
 
 #### Additional information
 
-The credentials file can store multiple api keys. For all of the scripts you can specify an extra argument 
+The credentials file can store multiple api keys. For all of the scripts you can specify an extra argument
 
->  --stack=cad 
+>  --stack=cad
 
 as needed to pick the right credentials.
 
@@ -116,7 +166,7 @@ to pick the right company Id. You can also save it as a **companyId** field in y
 
 #### Editing in Visual Studio Code
 
-To customize any of these scripts or add additional ones, using **Visual Studio Code** IDE is highly recommended. 
+To customize any of these scripts or add additional ones, using **Visual Studio Code** IDE is highly recommended.
 
 1. Style and eslint settings are preconfigured for Visual Studio Code workspace.
 2. Debugging various scripts are already setup in **lauch.json**

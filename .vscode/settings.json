@@ -1,6 +1,10 @@
 {
   "editor.tabSize": 2,
-  "editor.formatOnSave": true,
+  "eslint.format.enable": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "files.trimTrailingWhitespace": true,
   "search.exclude": {
     "**/node_modules": false
   },

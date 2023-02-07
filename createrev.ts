@@ -1,8 +1,8 @@
 import { promises as fs } from 'fs';
-import * as mkdirp from 'mkdirp';
-import { mainLog } from './utils/logger';
-import { ArgumentParser } from './utils/argumentparser';
-import { ApiClient } from './utils/apiclient';
+import { FolderType, getFolderPath } from './utils/fileutils.js';
+import { mainLog } from './utils/logger.js';
+import { ArgumentParser } from './utils/argumentparser.js';
+import { ApiClient } from './utils/apiclient.js';
 import {
   BasicNode,
   Constants,
@@ -14,10 +14,10 @@ import {
   ReleasePackage,
   ReleasePackageItem,
   ReleasePackageItemUpdate
-} from './utils/onshapetypes';
+} from './utils/onshapetypes.js';
 
 const LOG = mainLog();
-const OUTPUT_FOLDER = './output';
+const OUTPUT_FOLDER = getFolderPath(FolderType.OUTPUT);
 
 /**
  * Release Package only releases unreleased and revision managed items.  If any of the items have errors
@@ -90,9 +90,9 @@ async function releaseItems(apiClient: ApiClient) {
   const versionId: string = wv == 'v' ? regexMatch[3] : null;
   const elementId: string = regexMatch[4];
   let configuration: string = url.searchParams.get('configuration') || null;
-  const partId: string = ArgumentParser.get('pid');
+  let partId: string = ArgumentParser.get('pid');
 
-  // Use configuration from either the doc uri or input 
+  // Use configuration from either the doc uri or input
   const inputConfiguration: string = ArgumentParser.get('configuration');
   if (inputConfiguration) {
     if (configuration) {
@@ -101,16 +101,17 @@ async function releaseItems(apiClient: ApiClient) {
     configuration = inputConfiguration;
   }
 
-  LOG.info(`documentId=${documentId}, workspaceId=${workspaceId}, versionId=${versionId}, elementId=${elementId}, partId=${partId} configuration=${configuration}`);
-
-  const metadataUrl = lowerCasePath.replace('/documents/', 'api/metadata/d/');
+  // The depth allows one to get element and its parts metadata data with a single api call
+  const metadataUrl = lowerCasePath.replace('/documents/', 'api/metadata/d/') + '?depth=2';
   const elementMetadata = await apiClient.get(metadataUrl) as ElementMetadata;
   await fs.writeFile(`${OUTPUT_FOLDER}/metadata_${elementId}.json`, JSON.stringify(elementMetadata, null, 2));
 
   if (elementMetadata.elementType === ElementType.PARTSTUDIO && !partId) {
-    LOG.error('--pid=xxx needs to be specified for PARTSTUDIO');
-    return;
+    const part = elementMetadata.parts.items.find((p) => p.partType === 'solid');
+    partId = part.partId;
   }
+
+  LOG.info(`documentId=${documentId}, workspaceId=${workspaceId}, versionId=${versionId}, elementId=${elementId}, partId=${partId} configuration=${configuration}`);
 
   /**
    * To create a release package you need to specify a list of top level items. If the creation is successfull
@@ -134,7 +135,7 @@ async function releaseItems(apiClient: ApiClient) {
 
   await fs.writeFile(`${OUTPUT_FOLDER}/rp_create_${releasePackage.id}.json`, JSON.stringify(releasePackage, null, 2));
 
-  // To transition we need flatter the item and its children and only include revision managed and not already released items
+  // To transition we need flatten the item and its children and only include revision managed and not already released items
   const items = collectValidItems(releasePackage.items);
   if (items.length === 0) {
     throw new Error(`No items found to release in rpId=${releasePackage.id}`);
@@ -200,14 +201,11 @@ async function releaseItems(apiClient: ApiClient) {
   LOG.info('CREATE_AND_RELEASE Was success');
 }
 
-void async function () {
-  try {
-    await mkdirp.manual(OUTPUT_FOLDER);
-    const stackToUse: string = ArgumentParser.get('stack');
-    const apiClient = await ApiClient.createApiClient(stackToUse);
-    await releaseItems(apiClient);
-  } catch (error) {
-    console.error(error);
-    LOG.error('Processing folder failed', error);
-  }
-}();
+try {
+  const stackToUse: string = ArgumentParser.get('stack');
+  const apiClient = await ApiClient.createApiClient(stackToUse);
+  await releaseItems(apiClient);
+} catch (error) {
+  console.error(error);
+  LOG.error('Creating revision failed', error);
+}

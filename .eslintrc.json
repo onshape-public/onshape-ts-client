@@ -1,7 +1,7 @@
 {
   "env": {
     "node": true,
-    "es2021": true
+    "es2022": true
   },
   "extends": [
     "eslint:recommended",
@@ -14,8 +14,7 @@
     "sourceType": "module"
   },
   "plugins": [
-    "@typescript-eslint",
-    "jsdoc"
+    "@typescript-eslint"
   ],
   "ignorePatterns": ".compiledjs/**",
   "rules": {
@@ -41,11 +40,15 @@
     ],
     "no-template-curly-in-string": "error",
     "require-jsdoc": "off",
+    "no-trailing-spaces": "error",
     "max-len": "off",
     "no-unused-vars": "off",
     "space-before-function-paren": "off",
     "comma-dangle": "off",
+    "arrow-parens": "off",
     "valid-jsdoc": "off",
-    "@typescript-eslint/no-this-alias": "off"
+    "@typescript-eslint/no-empty-interface": "off",
+    "@typescript-eslint/no-this-alias": "off",
+    "@typescript-eslint/ban-ts-comment": "off"
   }
 }

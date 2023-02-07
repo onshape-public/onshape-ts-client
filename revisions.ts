@@ -1,31 +1,10 @@
-import { mainLog } from './utils/logger';
-import { promises as fs } from 'fs';
-import * as mkdirp from 'mkdirp';
-
-import { ArgumentParser } from './utils/argumentparser';
-import { ApiClient } from './utils/apiclient';
-import { CsvFileWriter } from './utils/csvFile';
-import {
-  GlobalNodeList,
-  Revision,
-} from './utils/onshapetypes';
+import { mainLog } from './utils/logger.js';
+import { ArgumentParser } from './utils/argumentparser.js';
+import { ApiClient } from './utils/apiclient.js';
+import { writeRevision } from './utils/csvFile.js';
+import { ListResponse, Revision } from './utils/onshapetypes.js';
 
 const LOG = mainLog();
-const OUTPUT_FOLDER = './output';
-const csvWriter = new CsvFileWriter('./revisions.csv');
-
-async function writetoCsv(rev: Revision) {
-  if (!csvWriter.isInitialized) {
-    const CSV_HEADERS = ['RevisionId', 'Part Number', 'Revision', 'CompanyId', 'Document Id', 'Version Id',
-      'Element Id', 'Part Id', 'Element Type', 'Configuration', 'Mime Type', 'Created At', 'ViewRef'];
-    await csvWriter.writeHeaders(CSV_HEADERS);
-  }
-
-  await csvWriter.writeLine([
-    rev.id, rev.partNumber, rev.revision, rev.companyId, rev.documentId, rev.versionId,
-    rev.elementId, rev.partId, rev.elementType, rev.configuration, rev.mimeType, rev.createdAt, rev.viewRef
-  ]);
-}
 
 async function findAllRevisions(apiClient: ApiClient, companyId: string, findAll: boolean) {
   const latestOnlyValue = findAll ? 'false' : 'true';
@@ -33,33 +12,28 @@ async function findAllRevisions(apiClient: ApiClient, companyId: string, findAll
   let totalRevCount = 0;
   while (nextBatchUri) {
     LOG.info(`Calling ${nextBatchUri}`);
-    const revsResponse = await apiClient.get(nextBatchUri) as GlobalNodeList;
+    const revsResponse = await apiClient.get(nextBatchUri) as ListResponse<Revision>;
     if (revsResponse.items) {
       totalRevCount += revsResponse.items.length;
       LOG.info(`Found total revisions = ${totalRevCount}`);
       for (const rev of revsResponse.items) {
-        const fileName = `${OUTPUT_FOLDER}/revision_${rev.id}.json`;
-        await fs.writeFile(fileName, JSON.stringify(rev, null, 2));
-        await writetoCsv(rev as Revision);
+        await writeRevision(rev);
       }
     }
     nextBatchUri = revsResponse.next;
   }
 }
 
-/**
- * This is the main entry point
- */
-void async function () {
-  try {
-    await mkdirp.manual(OUTPUT_FOLDER);
-    const stackToUse: string = ArgumentParser.get('stack');
-    const findAll: boolean = ArgumentParser.get('all');
-    const apiClient = await ApiClient.createApiClient(stackToUse);
-    const companyId: string = await apiClient.findCompanyId();
-    await findAllRevisions(apiClient, companyId, findAll);
-  } catch (error) {
-    console.error(error);
-    LOG.error('Processing folder failed', error);
+try {
+  const stackToUse: string = ArgumentParser.get('stack');
+  const findAll: boolean = ArgumentParser.get('all');
+  const apiClient = await ApiClient.createApiClient(stackToUse);
+  const companyInfo = await apiClient.findCompanyInfo();
+  if (!companyInfo.admin) {
+    throw new Error('Company admin permission required');
   }
-}();
+  await findAllRevisions(apiClient, companyInfo.id, findAll);
+} catch (error) {
+  console.error(error);
+  LOG.error('Enumerating all revisions failed', error);
+}

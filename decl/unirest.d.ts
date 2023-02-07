@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 declare module 'unirest' {
   export interface IUniResponse {
     statusCode: number;
     error: string;
     body: string;
+    raw_body?: any;
   }
   export interface IUniRest {
     get(...args: any[]): IUniRest;
@@ -18,5 +17,6 @@ declare module 'unirest' {
     timeout(...args: any[]): IUniRest;
     send(...args: any[]): IUniRest;
     end(...args: any[]): IUniRest;
+    encoding(...args: any[]): IUniRest;
   }
 }
