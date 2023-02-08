@@ -46,6 +46,37 @@ The script will generate **./reports/revisions/revisions.csv** that will contain
 
 ----------------------------------------------------------------------------------------------------
 
+## Find Tasks/Release Packages example
+
+Enumerate all release packages
+
+    $ npm run findworkflows
+
+Enumerate all release packages and general tasks
+
+    $ npm run findworkflows --objectType=TASK --objectType=RELEASE --objectType=OBSOLETION
+
+The will generate *csvs* for all tasks and release packages found. The API Key must be generated for a company admin as only they can enumerate all workflowable objects owned by company.
+
+###### Supported options
+
+> --objectType=TASK
+
+Find only workflowable with matching type. Option can be specified multiple times.
+
+* RELEASE  All release packages use to create revisions
+* OBSOLETION  All release packages use to obsolete revisions
+* TASK  All general tasks
+
+> --state=PENDING
+
+Filter for only matching state of the workflow. Option can be specified multiple times.
+Some example values are `OPEN COMPLETE` for tasks
+Some example values are `RELEASED SETUP PENDING` for release packages
+
+
+----------------------------------------------------------------------------------------------------
+
 ## Programmatic Revision Creation
 
 This script will create a release package for specified version and elementId and do a release. For
@@ -104,6 +135,7 @@ It does so by running a http server and exposing http://localhost:9191/onshapeev
 * Saves every release package transition in `./reports/webhook/release_packages.csv`
 * Export every released part as STEP format and save in `./exports/webhook` using the polling mechanism
 * Export every released drawing as PDF format and save in `./exports/webhook` using the `onshape.model.translation.complete` webhook event
+* Export every released assembly as GTLF format and save in `./exports/webhook`
 
 ###### Supported options
 > ---webhookuri='https://yourserver.com/onshapeevents'

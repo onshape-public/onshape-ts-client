@@ -86,38 +86,20 @@ export class ApiClient {
   }
 
   public async post(apiRelativePath: string, bodyData: unknown): Promise<unknown> {
-    await this.avoidApiLimit();
     return await this.callApiVerb(apiRelativePath, 'POST', bodyData);
   }
 
-  public async get(apiRelativePath: string): Promise<unknown> {
-    await this.avoidApiLimit();
-    return await this.callApiVerb(apiRelativePath, 'GET');
+  public async get(apiRelativePath: string, acceptHeader?: string): Promise<unknown> {
+    return await this.callApiVerb(apiRelativePath, 'GET', null, acceptHeader);
   }
 
   public async delete(apiRelativePath: string): Promise<unknown> {
-    await this.avoidApiLimit();
     return await this.callApiVerb(apiRelativePath, 'DELETE');
   }
 
   public async downloadFile(apiRelativePath: string, filePath: string) {
-    await this.avoidApiLimit();
-    const self = this;
-    const fullUri = apiRelativePath.startsWith('http') ? apiRelativePath : self.baseURL + apiRelativePath;
-    return new Promise(function (resolve, reject) {
-      LOG.debug(`Downloading ${fullUri} to ${filePath}`);
-      const downloadreq = self.getSignedUnirest(fullUri, 'GET');
-      downloadreq
-        .encoding('binary')
-        .timeout(600000)
-        .end(function (response: IUniResponse) {
-          if (self.isStatusCodeBad(response.statusCode)) {
-            reject(new Error('Failed with status code ' + response.statusCode));
-          } else {
-            fs.writeFile(filePath, response.raw_body, 'binary');
-            resolve('done');
-          }
-        });
+    return await this.rateLimitedCall(async () => {
+      return this.downloadFileInternal(apiRelativePath, filePath);
     });
   }
 
@@ -139,16 +121,52 @@ export class ApiClient {
     this.secretKey = secretKey;
   }
 
-  private isStatusCodeBad(statusCode: number): boolean {
-    return statusCode >= 300 || statusCode <= 100;
+  private async callApiVerb(apiRelativePath: string, verb: string, bodyData?: unknown, acceptHeader?: string): Promise<unknown> {
+    return await this.rateLimitedCall(async () => {
+      return this.callApiVerbInternal(apiRelativePath, verb, bodyData, acceptHeader);
+    });
   }
 
-  private async callApiVerb(apiRelativePath: string, verb: string, bodyData?: unknown): Promise<unknown> {
+  private async downloadFileInternal(apiRelativePath: string, filePath: string) {
+    const self = this;
+    const fullUri = apiRelativePath.startsWith('http') ? apiRelativePath : self.baseURL + apiRelativePath;
+    return new Promise(function (resolve, reject) {
+      LOG.debug(`Downloading ${fullUri} to ${filePath}`);
+      const downloadreq = self.getSignedUnirest(fullUri, 'GET');
+      downloadreq
+        .encoding('binary')
+        .timeout(600000)
+        .end(function (response: IUniResponse) {
+          const apiError = self.validateApiResponse(response);
+          if (apiError) {
+            reject(apiError);
+          } else {
+            fs.writeFile(filePath, response.raw_body, 'binary');
+            resolve('done');
+          }
+        });
+    });
+  }
+
+  private validateApiResponse(response: IUniResponse) {
+    const statusCode: number = response.statusCode;
+    if ((statusCode >= 300 || statusCode <= 100) || response.error) {
+      const errorMessage = response.statusMessage || response?.error?.message || 'Unknown Onshape API Error';
+      const errorOpts = {
+        cause: statusCode || 'UNKNOWN_STATUS_CODE',
+        body: response.body || 'NO_BODY',
+      };
+      return new Error(errorMessage, errorOpts);
+    }
+    return null;
+  }
+
+  private async callApiVerbInternal(apiRelativePath: string, verb: string, bodyData?: unknown, acceptHeader?: string): Promise<unknown> {
     const self = this;
     const fullUri = apiRelativePath.startsWith('http') ? apiRelativePath : new URL(apiRelativePath, this.baseURL).toString();
     LOG.info(`Calling ${verb} ${fullUri}`);
     return new Promise(function (resolve, reject) {
-      const lunitest = self.getSignedUnirest(fullUri, verb);
+      const lunitest = self.getSignedUnirest(fullUri, verb, null, acceptHeader);
       if (bodyData) {
         lunitest
           .send(bodyData)
@@ -156,13 +174,9 @@ export class ApiClient {
       }
 
       lunitest.end(function (response: IUniResponse) {
-        if (self.isStatusCodeBad(response.statusCode) || response.error) {
-          const errorJson = {
-            statusCode: response.statusCode || 'UNKNOWN_STATUS_CODE',
-            body: response.body || 'NO_BODY',
-          };
-          LOG.error(`${fullUri} failed`, errorJson);
-          reject(errorJson);
+        const apiError = self.validateApiResponse(response);
+        if (apiError) {
+          reject(apiError);
         } else {
           resolve(response.body);
         }
@@ -170,11 +184,7 @@ export class ApiClient {
     });
   }
 
-  private async avoidApiLimit(): Promise<boolean> {
-    return new Promise((resolve) => setTimeout(resolve, 200));
-  }
-
-  private getSignedUnirest(fullUri: string, method: string, contentType?: string) {
+  private getSignedUnirest(fullUri: string, method: string, contentType?: string, acceptHeader?: string) {
     const authDate = new Date().toUTCString();
     const onNonce = randomstring.generate({
       length: 25, charset: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890',
@@ -218,12 +228,55 @@ export class ApiClient {
     } else if ('DELETE' === method) {
       lunitest = lunitest.delete(fullUri);
     }
+    acceptHeader = acceptHeader || 'application/vnd.onshape.v2+json;charset=UTF-8;qs=0.2';
+    lunitest.header('Accept', acceptHeader);
     lunitest.header('Content-Type', contentType);
     lunitest.header('On-Nonce', onNonce);
     lunitest.header('Date', authDate);
     lunitest.header('Authorization', asign);
-    lunitest.header('Accept', 'application/vnd.onshape.v2+json;charset=UTF-8;qs=0.2');
     return lunitest;
+  }
+
+  /** The status code returned by Onshape when it rate limits apis */
+  private static readonly RATE_LIMITED_STATUS = 429;
+  /** Max number of tries before attempting to retry an API */
+  private static readonly MAX_ATTEMPTS = 5;
+
+  /** Exponentially back off when API starts return 429 status */
+  private static readonly SLEEP_MULTIFICATION_FACTOR = 1.5;
+  /** Sleep time between 429 responses. The duration is increased expotentially when errors are encountered */
+  private sleepTimeMs = 5000;
+
+  private apiErrorCount = 1;
+
+  /** Whether we should retry an api call that returned 429 response */
+  private shouldContinueAttempt(attempt: number): boolean {
+    return attempt <= ApiClient.MAX_ATTEMPTS;
+  }
+
+  /** Calls an API MAX_ATTEMPTS with exponential backoff to handle Onshape 429 responses */
+  private async rateLimitedCall(callbackFn: () => Promise<unknown>) {
+    let attempt = 1;
+    while (this.shouldContinueAttempt(attempt)) {
+      try {
+        attempt++;
+        const result = await callbackFn();
+        return result;
+      } catch (error) {
+        const errorException = error as Error;
+        if (errorException.cause === ApiClient.RATE_LIMITED_STATUS) {
+          LOG.error(`Handling error code 429 count=${this.apiErrorCount} sleep=${this.sleepTimeMs} ms`);
+          if (!this.shouldContinueAttempt(attempt)) {
+            throw error;
+          }
+          await new Promise(r => setTimeout(r, this.sleepTimeMs));
+          this.sleepTimeMs = Math.floor(this.sleepTimeMs * ApiClient.SLEEP_MULTIFICATION_FACTOR);
+          this.apiErrorCount++;
+        } else {
+          throw error;
+        }
+      }
+    }
   }
 }
 

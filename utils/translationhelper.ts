@@ -1,5 +1,6 @@
 import sanitize from 'sanitize-filename';
 import timeSpan from 'time-span';
+import { promises as fs } from 'fs';
 import { ApiClient } from './apiclient.js';
 import { FolderType, getFolderPath } from './fileutils.js';
 import { mainLog } from './logger.js';
@@ -51,6 +52,19 @@ export class TranslationHelper {
 
     this.translationIdToFilePath.set(translationReq.id, pdfOutput);
     LOG.info('Initiated Drawing translationReq', translationReq);
+  }
+
+  /** Invoke a GTLF translation, Unlike other exports this returns the response instead of creating a translation job */
+  public async exportAssemblyRevision(rev: Revision) {
+    const documentId = rev.documentId;
+    const filenameNoExt = sanitize(`${rev.partNumber}_${rev.revision}`);
+    const outputFileName = `${filenameNoExt}.gltf`;
+    const gltOutput = getFolderPath(FolderType.EXPORTS) + '/' + outputFileName;
+
+    // gtlf is requested with a Accept Header of either model/gltf-binary or model/gltf+json
+    const acceptHeader = 'model/gltf+json';
+    const gltfResponse = await this.apiClient.get(`api/assemblies/d/${documentId}/v/${rev.versionId}/e/${rev.elementId}/gltf`, acceptHeader);
+    await fs.writeFile(gltOutput, JSON.stringify(gltfResponse, null, 2));
   }
 
   /** Invoke a Part STEP translation and poll its status periodically until DONE to download it */

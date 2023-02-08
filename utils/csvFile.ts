@@ -6,7 +6,7 @@ import { FolderType, getFolderPath } from './fileutils.js';
 import { BasicNode, Revision } from './onshapetypes.js';
 
 enum CsvType {
-  VERSION, REVISION, WEBHOOK_NOTIFICATION, DOCUMENT_REFERENCES, RELEASE_PACAKGE
+  VERSION, REVISION, WEBHOOK_NOTIFICATION, DOCUMENT_REFERENCES, RELEASE_PACAKGE, WORKFLOW, TASK
 }
 
 /**
@@ -47,7 +47,7 @@ const CsvTypeHeaders: Record<CsvType, Record<string, string>> = {
     'Package Id': 'id',
     'Package Name': 'name',
     'Document Id': 'documentId',
-    'Item Count': 'items.length',
+    'Item Count': 'items?.length',
     'Version Id': 'versionId',
     'Is Obsoletion': 'workflow?.isObsoletion',
     'Is Frozen': 'workflow?.isFrozen',
@@ -88,6 +88,28 @@ const CsvTypeHeaders: Record<CsvType, Record<string, string>> = {
     'Created By': 'docCreator',
     'Modified By': 'docModifier',
   },
+  [CsvType.WORKFLOW]: {
+    'Object Id': 'id',
+    'Object Name': 'name',
+    'Object Type': 'objectType',
+    'State': 'stateId',
+    'Metadata State': 'metadataState',
+    'Can Be Discarded': 'canBeDiscarded',
+    'Is Discarded': 'isDiscarded',
+    'Is Frozen': 'isFrozen',
+    'Api Ref': 'href',
+  },
+  [CsvType.TASK]: {
+    'Task Id': 'id',
+    'Task Type': 'taskType',
+    'Task Name': 'name',
+    'Description': 'description',
+    'Editable': 'editable',
+    'User Count': 'users?.length',
+    'Item Count': 'taskItems?.length',
+    'Resolved By': 'resolvedBy?.name',
+    'Resolved At': 'resolvedAt',
+  },
 };
 
 /**
@@ -114,7 +136,7 @@ class CsvFileWriter {
     for (const keyValue of Object.values(CsvTypeHeaders[this.type])) {
       const expressToEval = `anObject.${keyValue}`;
       const cell = eval(expressToEval) ?? '';
-      lines.push(cell);
+      lines.push(cell.toString());
     }
     await this.flushToFile(lines);
   }
@@ -134,12 +156,20 @@ const writers: Record<CsvType, CsvFileWriter> = {
   [CsvType.WEBHOOK_NOTIFICATION]: new CsvFileWriter(CsvType.WEBHOOK_NOTIFICATION, 'notifications.csv'),
   [CsvType.DOCUMENT_REFERENCES]: new CsvFileWriter(CsvType.DOCUMENT_REFERENCES, 'references.csv'),
   [CsvType.RELEASE_PACAKGE]: new CsvFileWriter(CsvType.RELEASE_PACAKGE, 'release_packages.csv'),
+  [CsvType.WORKFLOW]: new CsvFileWriter(CsvType.WORKFLOW, 'workflow_objects.csv'),
+  [CsvType.TASK]: new CsvFileWriter(CsvType.WORKFLOW, 'tasks.csv'),
 };
 
 export async function writeRevision(rev: Revision) {
   const fileName = `${OUTPUT_FOLDER}/revision_${rev.id}.json`;
   await fs.writeFile(fileName, JSON.stringify(rev, null, 2));
   await writers[CsvType.REVISION].writeObject(rev);
+}
+
+export async function writeWorkflowObject(wfObject: BasicNode) {
+  const fileName = `${OUTPUT_FOLDER}/workflow_object_${wfObject.id}.json`;
+  await fs.writeFile(fileName, JSON.stringify(wfObject, null, 2));
+  await writers[CsvType.WORKFLOW].writeObject(wfObject);
 }
 
 export async function writeVersion(version: BasicNode) {
@@ -152,6 +182,12 @@ export async function writeReleasePackage(releasePackage: BasicNode) {
   const fileName = `${OUTPUT_FOLDER}/release_package_${releasePackage.id}.json`;
   await fs.writeFile(fileName, JSON.stringify(releasePackage, null, 2));
   await writers[CsvType.RELEASE_PACAKGE].writeObject(releasePackage);
+}
+
+export async function writeTask(task: BasicNode) {
+  const fileName = `${OUTPUT_FOLDER}/task_${task.id}.json`;
+  await fs.writeFile(fileName, JSON.stringify(task, null, 2));
+  await writers[CsvType.TASK].writeObject(task);
 }
 
 export async function writeNotification(webhookEvent: {messageId: string}) {

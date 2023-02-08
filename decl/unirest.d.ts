@@ -1,7 +1,8 @@
 declare module 'unirest' {
   export interface IUniResponse {
-    statusCode: number;
-    error: string;
+    statusCode?: number;
+    statusMessage?: string;
+    error: Error;
     body: string;
     raw_body?: any;
   }

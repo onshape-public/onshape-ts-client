@@ -24,7 +24,7 @@
       "program": "${workspaceFolder}/.compiledjs/webhook.js",
       "args": [
         "--stack=ramcomember",
-        "--documentId=6ba7732e73a998f5c81bdda0",
+        "--documentId=b86a3238836cdef46a062048",
         "--webhookuri=http://localhost.onshape.io:9191/onshapeevents",
       ],
       "request": "launch",
@@ -60,7 +60,24 @@
       ],
       "program": "${workspaceFolder}/.compiledjs/revisions.js",
       "args": [
-        "--stack=clexcorp"
+        "--stack=ramco"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/**/*.js"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Find Workflowable Objects",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/.compiledjs/workflows.js",
+      "args": [
+        "--stack=ramco",
+        "--objectType=TASK"
       ],
       "outFiles": [
         "${workspaceFolder}/**/*.js"

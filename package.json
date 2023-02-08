@@ -5,9 +5,10 @@
   "description": "Examples of Onshape APIs in typescript",
   "scripts": {
     "build": "npm install && tsc",
-    "cleanoutputdirectory": "rimraf ./output",
+    "cleanoutputdirectory": "rimraf ./output && rimraf ./exports && rimraf ./reports && rimraf logs",
     "processfolder": "node .compiledjs/folder.js",
     "findrevisions": "node .compiledjs/revisions.js",
+    "findworkflows": "node .compiledjs/workflows.js",
     "createrevision": "node .compiledjs/createrev.js",
     "webhook": "node .compiledjs/webhook.js"
   },

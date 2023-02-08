@@ -127,7 +127,10 @@ async function handleWebhookEvent(eventJson: WebHookEvent) {
         await translationHelper.exportDrawingRevision(newRev);
       } else if (newRev.elementType === ElementType.PARTSTUDIO) {
         await translationHelper.exportPartRevisionSync(newRev);
+      } else if (newRev.elementType === ElementType.ASSEMBLY) {
+        await translationHelper.exportAssemblyRevision(newRev);
       }
+
       break;
     }
     case 'onshape.workflow.transition': {
