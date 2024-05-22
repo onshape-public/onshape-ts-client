@@ -3,10 +3,10 @@ import { promises as fs } from 'fs';
 import { FileHandle } from 'fs/promises';
 import Path from 'path';
 import { FolderType, getFolderPath } from './fileutils.js';
-import { BasicNode, Revision } from './onshapetypes.js';
+import { BasicNode, Revision, RevisionExport } from './onshapetypes.js';
 
-enum CsvType {
-  VERSION, REVISION, WEBHOOK_NOTIFICATION, DOCUMENT_REFERENCES, RELEASE_PACAKGE, WORKFLOW, TASK
+export enum CsvType {
+  VERSION, REVISION, WEBHOOK_NOTIFICATION, DOCUMENT_REFERENCES, RELEASE_PACAKGE, WORKFLOW, TASK, REVISION_EXPORT
 }
 
 /**
@@ -43,7 +43,17 @@ const CsvTypeHeaders: Record<CsvType, Record<string, string>> = {
     'Created At': 'createdAt',
     'ViewRef': 'viewRef',
   },
-  [CsvType.RELEASE_PACAKGE]: {
+  [CsvType.REVISION_EXPORT]: {
+    'Revision Id': 'id',
+    'Created At': 'createdAt',
+    'Company Id': 'companyId',
+    'File Name': 'fileName',
+    'Part Number': 'partNumber',
+    'Revision': 'revision',
+    'Element Type': 'elementType',
+    'Exported At': 'exportedAt',
+    'Message': 'message'
+  }, [CsvType.RELEASE_PACAKGE]: {
     'Package Id': 'id',
     'Package Name': 'name',
     'Document Id': 'documentId',
@@ -119,16 +129,22 @@ class CsvFileWriter {
   private readonly type: CsvType;
   private fileHandle: FileHandle;
   private filePath;
+  private fileAppend;
 
-  public constructor(type: CsvType, fileName: string) {
+  public constructor(type: CsvType, fileName: string, appendMode?: boolean) {
     this.type = type;
     this.filePath = Path.join(getFolderPath(FolderType.REPORTS), fileName);
+    this.fileAppend = !!appendMode;
+  }
+
+  get FilePath(): string {
+    return this.filePath;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public async writeObject(anObject: unknown) {
     if (!this.fileHandle) {
-      this.fileHandle = await fs.open(this.filePath, 'w');
+      this.fileHandle = await fs.open(this.filePath, this.fileAppend ? 'a' : 'w');
       await this.flushToFile(Object.keys(CsvTypeHeaders[this.type]));
     }
 
@@ -153,6 +169,7 @@ const OUTPUT_FOLDER = getFolderPath(FolderType.OUTPUT);
 const writers: Record<CsvType, CsvFileWriter> = {
   [CsvType.VERSION]: new CsvFileWriter(CsvType.VERSION, 'versions.csv'),
   [CsvType.REVISION]: new CsvFileWriter(CsvType.REVISION, 'revisions.csv'),
+  [CsvType.REVISION_EXPORT]: new CsvFileWriter(CsvType.REVISION_EXPORT, 'revision_exports.csv', true),
   [CsvType.WEBHOOK_NOTIFICATION]: new CsvFileWriter(CsvType.WEBHOOK_NOTIFICATION, 'notifications.csv'),
   [CsvType.DOCUMENT_REFERENCES]: new CsvFileWriter(CsvType.DOCUMENT_REFERENCES, 'references.csv'),
   [CsvType.RELEASE_PACAKGE]: new CsvFileWriter(CsvType.RELEASE_PACAKGE, 'release_packages.csv'),
@@ -160,10 +177,19 @@ const writers: Record<CsvType, CsvFileWriter> = {
   [CsvType.TASK]: new CsvFileWriter(CsvType.WORKFLOW, 'tasks.csv'),
 };
 
+export function getFilePath(csvType: CsvType) {
+  const csvWriter = writers[csvType];
+  return csvWriter.FilePath;
+}
+
 export async function writeRevision(rev: Revision) {
   const fileName = `${OUTPUT_FOLDER}/revision_${rev.id}.json`;
   await fs.writeFile(fileName, JSON.stringify(rev, null, 2));
   await writers[CsvType.REVISION].writeObject(rev);
+}
+
+export async function writeRevisionExport(rev: RevisionExport) {
+  await writers[CsvType.REVISION_EXPORT].writeObject(rev);
 }
 
 export async function writeWorkflowObject(wfObject: BasicNode) {

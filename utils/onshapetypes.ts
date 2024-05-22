@@ -29,6 +29,7 @@ export interface GlobalNode extends BasicNode {
 export interface DocumentNode extends GlobalNode {
   defaultWorkspace?: BasicNode;
   parentId?: string;
+  trash?: boolean;
 }
 
 export interface AElementExtRef {
@@ -67,6 +68,30 @@ export interface Revision extends BasicNode {
   createdAt?: string;
   viewRef?: string;
 }
+
+export interface RevisionExport {
+  id: string;
+  companyId: string;
+  createdAt: string;
+  fileName?: string;
+  partNumber: string;
+  revision: string;
+  elementType: ElementType;
+  exportedAt?: string;
+  message?: string;
+}
+
+export interface ExportOptions {
+  formatName: string,
+  destinationName?: string;
+  storeInDocument?: boolean;
+  partIds?: string;
+  showOverriddenDimensions?: boolean,
+  colorMethod?: string,
+  level?: string
+  fileExtension?: string,
+}
+
 
 export enum ElementType {
   PARTSTUDIO,

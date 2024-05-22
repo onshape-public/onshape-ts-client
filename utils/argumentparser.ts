@@ -10,7 +10,19 @@ import minimist from 'minimist';
 export class ArgumentParser {
   public static get<T>(optionName: string, defaultValue?: (string | number | boolean)): T {
     const argv = minimist(process.argv.slice(2));
-    return argv[optionName] || process.env[`npm_config_${optionName.toLocaleLowerCase()}`] || defaultValue || null;
+    if (argv[optionName] !== undefined) {
+      return argv[optionName];
+    }
+    return defaultValue as T || null;
+  }
+
+  public static getLowerCase(optionName: string, defaultValue?: string): string {
+    const argv = minimist(process.argv.slice(2));
+    const argValue = argv[optionName] || process.env[`npm_config_${optionName.toLocaleLowerCase()}`] || defaultValue || null;
+    if (argValue) {
+      return String(argValue).toLowerCase();
+    }
+    return null;
   }
 
   public static getArray(optionName: string): string[] {

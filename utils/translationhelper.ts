@@ -1,10 +1,11 @@
 import sanitize from 'sanitize-filename';
 import timeSpan from 'time-span';
 import { promises as fs } from 'fs';
+import { existsSync } from 'fs';
 import { ApiClient } from './apiclient.js';
 import { FolderType, getFolderPath } from './fileutils.js';
 import { mainLog } from './logger.js';
-import { BasicNode, Revision } from './onshapetypes.js';
+import { BasicNode, ExportOptions, Revision } from './onshapetypes.js';
 const LOG = mainLog();
 
 /**
@@ -41,7 +42,6 @@ export class TranslationHelper {
     const outputFileName = `${filenameNoExt}.pdf`;
     const pdfOutput = getFolderPath(FolderType.EXPORTS) + '/' + outputFileName;
 
-
     // Initiate drawing to PDF translation
     const translationReq = await this.apiClient.post(`api/drawings/d/${documentId}/v/${rev.versionId}/e/${rev.elementId}/translations`, {
       formatName: 'PDF',
@@ -51,7 +51,7 @@ export class TranslationHelper {
     }) as BasicNode;
 
     this.translationIdToFilePath.set(translationReq.id, pdfOutput);
-    LOG.info('Initiated Drawing translationReq', translationReq);
+    LOG.debug('Initiated Drawing translationReq', translationReq);
   }
 
   /** Invoke a GTLF translation, Unlike other exports this returns the response instead of creating a translation job */
@@ -67,42 +67,72 @@ export class TranslationHelper {
     await fs.writeFile(gltOutput, JSON.stringify(gltfResponse, null, 2));
   }
 
-  /** Invoke a Part STEP translation and poll its status periodically until DONE to download it */
-  public async exportPartRevisionSync(rev: Revision) {
+  /** Invoke a Drawing translation and poll its status periodically until DONE to download it */
+  public async exportDrawingRevisionSync(rev: Revision, exportOptions: ExportOptions) {
     const documentId = rev.documentId;
-    const filenameNoExt = sanitize(`${rev.partNumber}_${rev.revision}`);
-    const outputFileName = `${filenameNoExt}.step`;
-    const stepOutput = getFolderPath(FolderType.EXPORTS) + '/' + outputFileName;
+    const outputFileName = `${exportOptions.destinationName}.${exportOptions.fileExtension}`;
+    const fullOutputPath = getFolderPath(FolderType.EXPORTS) + '/' + outputFileName;
+    exportOptions.storeInDocument = false;
 
+    if (await this.isRevAlreadyExported(rev, fullOutputPath)) {
+      return;
+    }
 
-    // Initiate a request to translate part to step format. This gives href that you can poll to see if the translation has completed
-    const translationReq = await this.apiClient.post(`api/partstudios/d/${documentId}/v/${rev.versionId}/e/${rev.elementId}/translations`, {
-      formatName: 'STEP',
-      partIds: rev.partId,
-      configuration: rev.configuration,
-      storeInDocument: false,
-      destinationName: outputFileName
-    }) as BasicNode;
+    // Initiate drawing to PDF translation
+    const jobStatus = await this.apiClient.post(`api/drawings/d/${documentId}/v/${rev.versionId}/e/${rev.elementId}/translations`, exportOptions) as TranslationJob;
+    LOG.info(`Initiated Drawing ${rev.partNumber} translation for format ${exportOptions.formatName}`, jobStatus);
+    await this.pollUntilCompletion(rev, jobStatus);
+    await this.downloadCompletedFile(jobStatus, fullOutputPath);
+  }
 
-    LOG.info('Initiated Part STEP translationReq', translationReq);
-    let jobStatus: TranslationJob = { requestState: 'ACTIVE', id: '' };
-    // Wait until the step export has finished
+  private async isRevAlreadyExported(rev: Revision, existingFilePath: string) {
+    if (existsSync(existingFilePath)) {
+      const fStats = await fs.stat(existingFilePath);
+      const revCreationDate = new Date(rev.createdAt);
+      const fileCreationDate = new Date(fStats.ctime);
+      LOG.info(`Skipping ${rev.partNumber}_${rev.revision} as it is already exported`);
+      return fileCreationDate > revCreationDate;
+    }
+    return false;
+  }
+
+  /** Invoke a Part translation and poll its status periodically until DONE to download it */
+  public async exportPartRevisionSync(rev: Revision, exportOptions: ExportOptions) {
+    const documentId = rev.documentId;
+    const outputFileName = `${exportOptions.destinationName}.${exportOptions.fileExtension}`;
+    const fullOutputPath = getFolderPath(FolderType.EXPORTS) + '/' + outputFileName;
+
+    if (await this.isRevAlreadyExported(rev, fullOutputPath)) {
+      return;
+    }
+
+    exportOptions.storeInDocument = false;
+    exportOptions.partIds =rev.partId;
+
+    // Initiate a request to translate part. This gives href that you can poll to see if the translation has completed
+    const jobStatus = await this.apiClient.post(`api/partstudios/d/${documentId}/v/${rev.versionId}/e/${rev.elementId}/translations`, exportOptions) as TranslationJob;
+
+    LOG.info(`Initiated Part ${rev.partNumber} translation for format ${exportOptions.formatName}`, jobStatus);
+    await this.pollUntilCompletion(rev, jobStatus);
+    await this.downloadCompletedFile(jobStatus, fullOutputPath);
+  }
+
+  private async pollUntilCompletion(rev: Revision, jobStatus: TranslationJob) {
+    // Poll repeatedly until the export has finished
     const end = timeSpan();
     while (jobStatus.requestState === 'ACTIVE') {
       await new Promise((resolve) => setTimeout(resolve, 5000));
       const elaspedSeconds = end.seconds();
 
-      // If export takes over 10 minutes log and continue
+      // If export takes over 10 minutes error and continue
       if (elaspedSeconds > 600) {
-        LOG.error(`Part Step for ${filenameNoExt} Timed out after ${elaspedSeconds} seconds`);
-        return;
+        throw new Error(`Translation timed out after ${elaspedSeconds} seconds`);
       }
 
-      LOG.debug(`Waited for translation ${outputFileName} seconds=${elaspedSeconds} for ${outputFileName}`);
-      jobStatus = await this.apiClient.get(translationReq.href) as TranslationJob;
+      LOG.debug(`Waited for translation ${rev.partNumber} seconds=${elaspedSeconds}`);
+      const latestStatus = await this.apiClient.get(jobStatus.href) as TranslationJob;
+      Object.assign(jobStatus, latestStatus);
     }
-
-    await this.downloadCompletedFile(jobStatus, stepOutput);
   }
 
   /** Called to webhook notification when translation is done or failed */
@@ -125,6 +155,7 @@ export class TranslationHelper {
       await this.apiClient.downloadFile(`api/documents/d/${documentId}/externaldata/${externalId}`, filePath);
     } else {
       LOG.error('Bad translation completion status', completedTranslation);
+      throw new Error(`Translation completion ${completedTranslation}`);
     }
   }
 }

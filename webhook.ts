@@ -56,6 +56,9 @@ interface WebHookParams extends WebHookCommon {
   /** List of events that webhook will notify you about */
   events: string[];
 
+  /** Transient webhooks are automatically cleaned up by Onshape */
+  isTransient: boolean;
+
   /** Use these to restrict the scope of documentId notifications */
   versionId?: string;
   workspaceId?: string;
@@ -121,12 +124,17 @@ async function handleWebhookEvent(eventJson: WebHookEvent) {
     switch (eventJson.event) {
     case 'onshape.revision.created': {
       const newRev = await apiClient.get(`api/revisions/${eventJson.revisionId}`) as Revision;
-      LOG.trace('Newly created Revision', newRev);
+      LOG.info('Newly created Revision', newRev);
       writeRevision(newRev);
       if (newRev.elementType === ElementType.DRAWING) {
         await translationHelper.exportDrawingRevision(newRev);
       } else if (newRev.elementType === ElementType.PARTSTUDIO) {
-        await translationHelper.exportPartRevisionSync(newRev);
+        const exportOptions = {
+          formatName: 'STEP',
+          destinationName: `${newRev.partNumber}_${newRev.revision}`,
+          fileExtension: 'step'
+        };
+        await translationHelper.exportPartRevisionSync(newRev, exportOptions);
       } else if (newRev.elementType === ElementType.ASSEMBLY) {
         await translationHelper.exportAssemblyRevision(newRev);
       }
@@ -212,6 +220,7 @@ async function registerWebhook(apiClient: ApiClient) {
   const webhookJson: WebHookParams = {
     url: webhookListenURL,
     data: WEBHOOK_DATA_ID,
+    isTransient: true,
     options: {
       'collapseEvents': false
     },

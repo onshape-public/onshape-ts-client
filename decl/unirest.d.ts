@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 declare module 'unirest' {
   export interface IUniResponse {
     statusCode?: number;
     statusMessage?: string;
     error: Error;
-    body: string;
+    body?: any;
     raw_body?: any;
   }
   export interface IUniRest {

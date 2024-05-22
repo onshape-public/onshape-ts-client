@@ -9,7 +9,6 @@
       "console": "integratedTerminal",
       "program": "${workspaceFolder}/.compiledjs/webhook.js",
       "args": [
-        "--stack=clexcorp",
         "--ngrok"
       ],
       "request": "launch",
@@ -23,8 +22,7 @@
       "console": "integratedTerminal",
       "program": "${workspaceFolder}/.compiledjs/webhook.js",
       "args": [
-        "--stack=ramcomember",
-        "--documentId=b86a3238836cdef46a062048",
+        "--stack=ramco",
         "--webhookuri=http://localhost.onshape.io:9191/onshapeevents",
       ],
       "request": "launch",
@@ -60,7 +58,25 @@
       ],
       "program": "${workspaceFolder}/.compiledjs/revisions.js",
       "args": [
-        "--stack=ramco"
+        "--stack=clexcorp"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/**/*.js"
+      ]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Revision Export",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/.compiledjs/revisionexport.js",
+      "args": [
+        "--drawing=pdf",
+        "--export-dir=/${env:HOME}/Downloads/webhook/export",
+        "--report-dir=/${env:HOME}/Downloads/webhook/report"
       ],
       "outFiles": [
         "${workspaceFolder}/**/*.js"
@@ -76,7 +92,7 @@
       ],
       "program": "${workspaceFolder}/.compiledjs/workflows.js",
       "args": [
-        "--stack=ramco",
+        "--stack=clexcorp",
         "--objectType=TASK"
       ],
       "outFiles": [
@@ -94,7 +110,6 @@
       "preLaunchTask": "clean_outputdir",
       "program": "${workspaceFolder}/.compiledjs/createrev.js",
       "args": [
-        "--stack=clexcorp",
         "--docuri=https://clexcorp.onshape.com/documents/9a157ab732ea334a1c28b418/w/b964d261df257d9d57ae9548/e/1d505172c279300cb287efed"
       ],
       "outFiles": [

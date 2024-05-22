@@ -12,7 +12,7 @@ const logName = getLogName();
 configure({
   appenders: {
     everything: { type: 'stdout' },
-    main: { type: 'file', filename: getLogFilePath(), flags: 'w' },
+    main: { type: 'file', filename: getLogFilePath(), flags: 'a', maxLogSize: 1048576, backups: 10 },
     infofilter: { type: 'logLevelFilter', appender: 'everything', level: 'info' }
   },
   categories: { default: { appenders: ['main', 'infofilter'], level: 'all' } }

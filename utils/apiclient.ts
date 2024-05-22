@@ -7,6 +7,7 @@ import { IUniResponse, IUniRest } from 'unirest';
 import { mainLog } from './logger.js';
 import { ArgumentParser } from './argumentparser.js';
 import { CompanyInfo, ListResponse } from './onshapetypes.js';
+import { getLogName } from './fileutils.js';
 
 const LOG = mainLog();
 
@@ -82,6 +83,7 @@ export class ApiClient {
     } else if (companyCount > 1) {
       throw new Error('User is member of multiple companies. Please specify --companyId=XXXX as argument');
     }
+    this.companyId = this.companyId || allCompanies[0].id;
     return allCompanies[0];
   }
 
@@ -151,12 +153,15 @@ export class ApiClient {
   private validateApiResponse(response: IUniResponse) {
     const statusCode: number = response.statusCode;
     if ((statusCode >= 300 || statusCode <= 100) || response.error) {
-      const errorMessage = response.statusMessage || response?.error?.message || 'Unknown Onshape API Error';
-      const errorOpts = {
-        cause: statusCode || 'UNKNOWN_STATUS_CODE',
-        body: response.body || 'NO_BODY',
-      };
-      return new Error(errorMessage, errorOpts);
+      let errorMessage = `statusCode=${statusCode} `;
+      if (response?.body instanceof Object) {
+        if (response?.body?.message) {
+          errorMessage += response?.body?.message;
+        } else if (response.statusMessage) {
+          errorMessage += response.statusMessage;
+        }
+      }
+      return new Error(errorMessage);
     }
     return null;
   }
@@ -228,12 +233,24 @@ export class ApiClient {
     } else if ('DELETE' === method) {
       lunitest = lunitest.delete(fullUri);
     }
+
     acceptHeader = acceptHeader || 'application/vnd.onshape.v2+json;charset=UTF-8;qs=0.2';
+    const scriptName = getLogName();
     lunitest.header('Accept', acceptHeader);
+    lunitest.header('User-Agent', `onshape-ts-client-1.1.0/${scriptName}`);
     lunitest.header('Content-Type', contentType);
     lunitest.header('On-Nonce', onNonce);
     lunitest.header('Date', authDate);
     lunitest.header('Authorization', asign);
+
+    /**
+     * Generate unique request id per script so it is easily searchable in kibana
+     *
+     * requestId:osts-revisionexport* AND response:* AND role:web_load_balancer
+     * can be used to search in kibana.
+     */
+    const requestId = randomstring.generate({ length: 24, charset: 'hex' });
+    lunitest.header('X-Request-Id', `osts-${scriptName}-${this.companyId}-${requestId}`);
     return lunitest;
   }
 

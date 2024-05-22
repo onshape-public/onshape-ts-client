@@ -1,6 +1,6 @@
 {
   "name": "onshape-ts-client",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Examples of Onshape APIs in typescript",
   "scripts": {
@@ -10,7 +10,9 @@
     "findrevisions": "node .compiledjs/revisions.js",
     "findworkflows": "node .compiledjs/workflows.js",
     "createrevision": "node .compiledjs/createrev.js",
-    "webhook": "node .compiledjs/webhook.js"
+    "revisionexport": "node .compiledjs/revisionexport.js",
+    "webhook": "node .compiledjs/webhook.js",
+    "test": "./test/testscript.bash"
   },
   "repository": {
     "type": "git",
