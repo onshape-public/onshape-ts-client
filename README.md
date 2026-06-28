@@ -162,7 +162,7 @@ Simply run the following command
     $ node ./.compiledjs/webhook.js
     $ node ./.compiledjs/webhook.js -- --documentId=9a157ab732ea334a1c28b418 # If not running as a company admin
 
-It does so by running a http server and exposing http://localhost:9191/onshapeevents via either ngrok or localtunnel to cad.onshape.com
+It does so by running a http server and exposing http://localhost:9191/onshapeevents via ngrok to cad.onshape.com
 
 ### What it does:
 
@@ -184,11 +184,12 @@ The port on local host to run the node express server to listen for webhook noti
 
 > --ngrok
 
-Use https://ngrok.com/ free tunneling service to expose your local computer to outside
+Use https://ngrok.com/ free tunneling service to expose your local computer to outside.
+This requires an ngrok authtoken, which must be provided via the `NGROK_AUTHTOKEN`
+environment variable. Get your token from https://dashboard.ngrok.com/get-started/your-authtoken
+and set it before running, for example:
 
-> --localtunnel
-
-Use https://localtunnel.me/ free tunneling service to expose your local computer to outside
+    $ export NGROK_AUTHTOKEN=<your-ngrok-authtoken>
 
 > --documentId=9a157ab732ea334a1c28b418
 

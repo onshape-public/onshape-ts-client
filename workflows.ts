@@ -46,7 +46,7 @@ async function findAllWorkflowableObjects(apiClient: ApiClient, companyId: strin
             }
           }
         } catch (error) {
-          LOG.error(`Error fetching ${wfObject.href}`);
+          LOG.error(`Error fetching ${wfObject.href}`, error);
         }
         await writeWorkflowObject(wfObject);
       }

@@ -1,15 +1,13 @@
-import localtunnel from 'localtunnel';
 import ON_DEATH from 'death';
 import { mainLog } from './logger.js';
 import { ApiClient } from './apiclient.js';
 const LOG = mainLog();
 
 /**
- * Responsible for cleanup when script is terminated. For now shutsdown any http tunneling and unregisters webhooks
+ * Responsible for cleanup when script is terminated. For now unregisters webhooks
  */
 class TerminationHandler {
   apiClient: ApiClient = null;
-  createdTunnel: localtunnel.Tunnel = null;
   handledTermination = false;
   createdWebhooks: string[] = [];
 
@@ -19,9 +17,6 @@ class TerminationHandler {
     }
     this.handledTermination = true;
     LOG.info('Received terminal signal', signal);
-    if (this.createdTunnel) {
-      this.createdTunnel.close();
-    }
     await this.deleteInstalledWebhooks(this.createdWebhooks);
   }
 
@@ -33,21 +28,10 @@ class TerminationHandler {
       }
     }
   }
-
-  set tunnel(tunnel: localtunnel.Tunnel) {
-    this.createdTunnel = tunnel;
-    tunnel.on('close', () => {
-      LOG.info(`Local tunneling to ${tunnel.url} has been closed`);
-    });
-    tunnel.on('error', (err) => {
-      LOG.error(`Local tunneling to ${tunnel.url} has error`, err);
-    });
-  }
 }
 
 export const terminationHandler = new TerminationHandler();
 
-// eslint-disable-next-line new-cap
 ON_DEATH(async function (signal) {
   try {
     await terminationHandler.terminate(signal);

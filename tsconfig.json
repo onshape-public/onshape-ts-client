@@ -1,14 +1,20 @@
 {
   "compilerOptions": {
-    "target": "es2022",
-    "module": "node16",
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "outDir": ".compiledjs",
     "sourceMap": true,
     "removeComments": true,
-    "strictNullChecks": false,
-    "moduleResolution": "node16",
-    "allowSyntheticDefaultImports": true,
-    "strict": true
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "strict": true,
+    "strictNullChecks": false
   },
   "include": [
     "*.ts",
@@ -17,5 +23,5 @@
   ],
   "exclude": [
     "./node_modules"
-  ],
+  ]
 }

@@ -38,7 +38,7 @@ const EXPORT_OPTIONS : Record<string, ExportOptions> = {
 };
 
 class RevisionProcessor {
-  private processRevs: Record<string, string> = {};
+  private processedRevisions: Record<string, string> = {};
   private lastCreatedAt: Date = null;
   private exportTypes: Record<number, string> = {};
   private translationHelper: TranslationHelper = null;
@@ -128,15 +128,20 @@ class RevisionProcessor {
     if (this.lastCreatedAt) {
       nextBatchUri = `${nextBatchUri}&after=${this.lastCreatedAt.toISOString()}&offset=1`;
     }
-    LOG.info('Staring revision search from date =', this.lastCreatedAt);
-    let totalRevCount = 0;
+    LOG.info('Starting revision search from date=', this.lastCreatedAt);
     while (nextBatchUri) {
       LOG.info(`Calling ${nextBatchUri}`);
       const revsResponse = await this.apiClient.get(nextBatchUri) as ListResponse<Revision>;
+      let newRevCount = 0;
       if (revsResponse.items) {
-        totalRevCount += revsResponse.items.length;
-        LOG.info(`Found total revisions = ${totalRevCount}`);
         for (const rev of revsResponse.items) {
+
+          if (this.processedRevisions[rev.id]) {
+            continue;
+          }
+
+          this.processedRevisions[rev.id] = rev.createdAt;
+          newRevCount++;
           const exportResult: RevisionExport = {
             id: rev.id,
             companyId: rev.companyId,
@@ -158,7 +163,13 @@ class RevisionProcessor {
             await writeRevisionExport(exportResult);
           }
         }
+        LOG.info(`Found new revisions = ${newRevCount}`);
       }
+
+      if (newRevCount === 0) {
+        break;
+      }
+
       nextBatchUri = revsResponse.next;
     }
   }
@@ -177,7 +188,7 @@ class RevisionProcessor {
         if (aLine.includes(this.companyId)) {
           const [revId, createdAt] = aLine.split(',');
           if (revId && revId.match(/[0-9A-Fa-f]{10,}/)) {
-            this.processRevs[revId] = createdAt;
+            this.processedRevisions[revId] = createdAt;
             lastCreatedAt = createdAt;
           }
         }

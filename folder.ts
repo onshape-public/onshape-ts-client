@@ -41,7 +41,7 @@ class SummaryReport {
     for (const workspace of workspaceList) {
       const fileName = `${OUTPUT_FOLDER}/document_${doc.id}_workspace_${workspace.id}.json`;
       LOG.info(`    Processing workspace=${workspace.id} name=${workspace.name}`);
-      let workspaceRef: WorkspaceRef = null;
+      let workspaceRef: WorkspaceRef;
 
       try {
         await fs.access(fileName, constants.R_OK);
@@ -140,10 +140,10 @@ class SummaryReport {
   }
 
   public async processFolder(folderId: string) {
-    let folder = null;
+    let folder: BasicNode;
     try {
       folder = await this.apiClient.get(`api/folders/${folderId}`) as BasicNode;
-    } catch (e) {
+    } catch {
       LOG.error(`Invalid folderId = ${folderId}`);
       return;
     }

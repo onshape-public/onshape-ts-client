@@ -1,6 +1,5 @@
 import { mainLog } from './utils/logger.js';
-import localtunnel from 'localtunnel';
-import ngrok from 'ngrok';
+import ngrok from '@ngrok/ngrok';
 import express, { Application, Request, Response } from 'express';
 import { ArgumentParser } from './utils/argumentparser.js';
 import { ApiClient } from './utils/apiclient.js';
@@ -170,7 +169,7 @@ async function handleWebhookEvent(eventJson: WebHookEvent) {
 
 /**
  * Returns the URL that will be used to install the webhook. Either uses
- * the specified URL or uses either ngrok or localtunnel to create a tunnel
+ * the specified URL or uses ngrok to create a tunnel
  * that onshape can use to relay message to the machine running this script.
  */
 async function getWebhookListenURL(): Promise<string> {
@@ -180,22 +179,17 @@ async function getWebhookListenURL(): Promise<string> {
     return webhookUri;
   }
 
-  const useLocalTunnel: boolean = ArgumentParser.get('localtunnel');
-  if (useLocalTunnel) {
-    const tunnel = await localtunnel(PORT);
-    terminationHandler.createdTunnel = tunnel;
-    LOG.info(`Established local tunnel [${tunnel.url}] => [http://localhost:${PORT}]`);
-    return `${tunnel.url}/onshapeevents`;
-  }
-
   const useNgrok: boolean = ArgumentParser.get('ngrok', true);
   if (useNgrok) {
-    const ngrokUrl = await ngrok.connect(PORT);
+    LOG.info(`Trying to create ngrok tunnel on port=${PORT}`);
+    // @ngrok/ngrok requires an authtoken; provide it via the NGROK_AUTHTOKEN env var.
+    const listener = await ngrok.connect({ addr: PORT, authtoken_from_env: true });
+    const ngrokUrl = listener.url();
     LOG.info(`Established ngrok tunnel [${ngrokUrl}] => [http://localhost:${PORT}]`);
     return `${ngrokUrl}/onshapeevents`;
   }
 
-  throw new Error('One of --webhookuri, or --ngrok or localtunnel needs to be specified');
+  throw new Error('One of --webhookuri or --ngrok needs to be specified');
 }
 
 /**

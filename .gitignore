@@ -7,3 +7,4 @@ reports/
 package-lock.json
 .DS_Store
 credentials.json
+.claude/

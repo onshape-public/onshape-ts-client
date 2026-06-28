@@ -57,9 +57,6 @@
         "<node_internals>/**"
       ],
       "program": "${workspaceFolder}/.compiledjs/revisions.js",
-      "args": [
-        "--stack=clexcorp"
-      ],
       "outFiles": [
         "${workspaceFolder}/**/*.js"
       ]

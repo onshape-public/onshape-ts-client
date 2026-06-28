@@ -7,19 +7,28 @@ import { ListResponse, Revision } from './utils/onshapetypes.js';
 const LOG = mainLog();
 
 async function findAllRevisions(apiClient: ApiClient, companyId: string, findAll: boolean) {
+  const processedRevisions: Record<string, string> = {};
   const latestOnlyValue = findAll ? 'false' : 'true';
   let nextBatchUri = `api/revisions/companies/${companyId}?latestOnly=${latestOnlyValue}`;
-  let totalRevCount = 0;
   while (nextBatchUri) {
     LOG.info(`Calling ${nextBatchUri}`);
     const revsResponse = await apiClient.get(nextBatchUri) as ListResponse<Revision>;
+    let newRevCount = 0;
     if (revsResponse.items) {
-      totalRevCount += revsResponse.items.length;
-      LOG.info(`Found total revisions = ${totalRevCount}`);
       for (const rev of revsResponse.items) {
+        if (processedRevisions[rev.id]) {
+          continue;
+        }
+
+        processedRevisions[rev.id] = rev.createdAt;
+        newRevCount++;
         await writeRevision(rev);
       }
     }
+    if (newRevCount === 0) {
+      break;
+    }
+    LOG.info(`Found new revisions = ${newRevCount}`);
     nextBatchUri = revsResponse.next;
   }
 }

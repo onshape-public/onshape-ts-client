@@ -71,11 +71,11 @@ async function releaseItems(apiClient: ApiClient) {
   }
 
   LOG.info(`Processing docuri=${docUri}`);
-  let url: URL = null;
+  let url: URL;
   try {
     url = new URL(docUri);
   } catch (error) {
-    throw new Error(`Failed to parse ${docUri} as valid URL`);
+    throw new Error(`Failed to parse ${docUri} as valid URL`, { cause: error });
   }
 
   const lowerCasePath = url.pathname.toLowerCase();

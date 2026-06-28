@@ -2,8 +2,6 @@ import randomstring from 'randomstring';
 import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import { constants } from 'fs';
-import unirest from 'unirest';
-import { IUniResponse, IUniRest } from 'unirest';
 import { mainLog } from './logger.js';
 import { ArgumentParser } from './argumentparser.js';
 import { CompanyInfo, ListResponse } from './onshapetypes.js';
@@ -16,6 +14,16 @@ interface StackCredential {
   companyId?: string;
   accessKey: string;
   secretKey: string;
+}
+
+/** Normalized HTTP response shape used internally after a fetch call. */
+interface ApiResponse {
+  statusCode: number;
+  statusMessage: string;
+  error: Error | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  body?: any;
+  raw_body?: Buffer;
 }
 
 /**
@@ -130,27 +138,18 @@ export class ApiClient {
   }
 
   private async downloadFileInternal(apiRelativePath: string, filePath: string) {
-    const self = this;
-    const fullUri = apiRelativePath.startsWith('http') ? apiRelativePath : self.baseURL + apiRelativePath;
-    return new Promise(function (resolve, reject) {
-      LOG.debug(`Downloading ${fullUri} to ${filePath}`);
-      const downloadreq = self.getSignedUnirest(fullUri, 'GET');
-      downloadreq
-        .encoding('binary')
-        .timeout(600000)
-        .end(function (response: IUniResponse) {
-          const apiError = self.validateApiResponse(response);
-          if (apiError) {
-            reject(apiError);
-          } else {
-            fs.writeFile(filePath, response.raw_body, 'binary');
-            resolve('done');
-          }
-        });
-    });
+    const fullUri = apiRelativePath.startsWith('http') ? apiRelativePath : this.baseURL + apiRelativePath;
+    LOG.debug(`Downloading ${fullUri} to ${filePath}`);
+    const response = await this.sendRequest(fullUri, 'GET', null, null, true);
+    const apiError = this.validateApiResponse(response);
+    if (apiError) {
+      throw apiError;
+    }
+    await fs.writeFile(filePath, response.raw_body);
+    return 'done';
   }
 
-  private validateApiResponse(response: IUniResponse) {
+  private validateApiResponse(response: ApiResponse) {
     const statusCode: number = response.statusCode;
     if ((statusCode >= 300 || statusCode <= 100) || response.error) {
       let errorMessage = `statusCode=${statusCode} `;
@@ -160,36 +159,75 @@ export class ApiClient {
         } else if (response.statusMessage) {
           errorMessage += response.statusMessage;
         }
+      } else if (response.error) {
+        errorMessage += response.error.message;
       }
-      return new Error(errorMessage);
+      return new Error(errorMessage, { cause: statusCode });
     }
     return null;
   }
 
   private async callApiVerbInternal(apiRelativePath: string, verb: string, bodyData?: unknown, acceptHeader?: string): Promise<unknown> {
-    const self = this;
     const fullUri = apiRelativePath.startsWith('http') ? apiRelativePath : new URL(apiRelativePath, this.baseURL).toString();
     LOG.info(`Calling ${verb} ${fullUri}`);
-    return new Promise(function (resolve, reject) {
-      const lunitest = self.getSignedUnirest(fullUri, verb, null, acceptHeader);
-      if (bodyData) {
-        lunitest
-          .send(bodyData)
-          .timeout(600000);
-      }
-
-      lunitest.end(function (response: IUniResponse) {
-        const apiError = self.validateApiResponse(response);
-        if (apiError) {
-          reject(apiError);
-        } else {
-          resolve(response.body);
-        }
-      });
-    });
+    const response = await this.sendRequest(fullUri, verb, bodyData, acceptHeader);
+    const apiError = this.validateApiResponse(response);
+    if (apiError) {
+      throw apiError;
+    }
+    return response.body;
   }
 
-  private getSignedUnirest(fullUri: string, method: string, contentType?: string, acceptHeader?: string) {
+  /** Performs a signed fetch call and normalizes the result into an ApiResponse. */
+  private async sendRequest(
+    fullUri: string,
+    method: string,
+    bodyData?: unknown,
+    acceptHeader?: string,
+    binary = false
+  ): Promise<ApiResponse> {
+    const { url, headers } = this.getSignedHeaders(fullUri, method, null, acceptHeader);
+    const init: RequestInit = {
+      method,
+      headers,
+      signal: AbortSignal.timeout(600000),
+    };
+    if (bodyData) {
+      init.body = JSON.stringify(bodyData);
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } catch (e) {
+      return { statusCode: 0, statusMessage: '', error: e as Error };
+    }
+
+    const response: ApiResponse = {
+      statusCode: res.status,
+      statusMessage: res.statusText,
+      error: null,
+    };
+
+    if (binary) {
+      response.raw_body = Buffer.from(await res.arrayBuffer());
+    } else {
+      const text = await res.text();
+      const contentType = res.headers.get('content-type') || '';
+      if (text && contentType.includes('json')) {
+        try {
+          response.body = JSON.parse(text);
+        } catch {
+          response.body = text;
+        }
+      } else {
+        response.body = text;
+      }
+    }
+    return response;
+  }
+
+  private getSignedHeaders(fullUri: string, method: string, contentType?: string, acceptHeader?: string): { url: string; headers: Record<string, string> } {
     const authDate = new Date().toUTCString();
     const onNonce = randomstring.generate({
       length: 25, charset: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890',
@@ -219,29 +257,8 @@ export class ApiClient {
     const signature = hmac.digest('base64');
     const asign = 'On ' + this.accessKey + ':HmacSHA256:' + signature;
 
-    let lunitest: IUniRest = unirest as IUniRest;
-    if ('GET' === method) {
-      lunitest = lunitest.get(fullUri);
-    } else if ('POST' === method) {
-      lunitest = lunitest.post(fullUri);
-    } else if ('PATCH' === method) {
-      lunitest = lunitest.patch(fullUri);
-    } else if ('HEAD' === method) {
-      lunitest = lunitest.head(fullUri);
-    } else if ('PUT' === method) {
-      lunitest = lunitest.put(fullUri);
-    } else if ('DELETE' === method) {
-      lunitest = lunitest.delete(fullUri);
-    }
-
     acceptHeader = acceptHeader || 'application/vnd.onshape.v2+json;charset=UTF-8;qs=0.2';
     const scriptName = getLogName();
-    lunitest.header('Accept', acceptHeader);
-    lunitest.header('User-Agent', `onshape-ts-client-1.1.0/${scriptName}`);
-    lunitest.header('Content-Type', contentType);
-    lunitest.header('On-Nonce', onNonce);
-    lunitest.header('Date', authDate);
-    lunitest.header('Authorization', asign);
 
     /**
      * Generate unique request id per script so it is easily searchable in kibana
@@ -250,21 +267,33 @@ export class ApiClient {
      * can be used to search in kibana.
      */
     const requestId = randomstring.generate({ length: 24, charset: 'hex' });
-    lunitest.header('X-Request-Id', `osts-${scriptName}-${this.companyId}-${requestId}`);
-    return lunitest;
+    const headers: Record<string, string> = {
+      'Accept': acceptHeader,
+      'User-Agent': `onshape-ts-client-1.2.0/${scriptName}`,
+      'Content-Type': contentType,
+      'On-Nonce': onNonce,
+      'Date': authDate,
+      'Authorization': asign,
+      'X-Request-Id': `osts-${scriptName}-${this.companyId}-${requestId}`,
+    };
+    return { url: fullUri, headers };
   }
 
   /** The status code returned by Onshape when it rate limits apis */
   private static readonly RATE_LIMITED_STATUS = 429;
+  /** The status code that indicates the script should abort immediately (e.g. payment required) */
+  private static readonly PAYMENT_REQUIRED_STATUS = 402;
   /** Max number of tries before attempting to retry an API */
-  private static readonly MAX_ATTEMPTS = 5;
+  private static readonly MAX_ATTEMPTS = 7;
 
-  /** Exponentially back off when API starts return 429 status */
-  private static readonly SLEEP_MULTIFICATION_FACTOR = 1.5;
-  /** Sleep time between 429 responses. The duration is increased expotentially when errors are encountered */
-  private sleepTimeMs = 5000;
-
-  private apiErrorCount = 1;
+  /**
+   * Exponentially back off when API starts return 429 status.
+   * Starting at 5s with factor 2 over 7 attempts the total wait is
+   * 5+10+20+40+80+160 = 315s (~5 minutes) before giving up.
+   */
+  private static readonly SLEEP_MULTIFICATION_FACTOR = 2;
+  /** Initial sleep time between 429 responses. The duration is increased exponentially when errors are encountered */
+  private static readonly INITIAL_SLEEP_MS = 5000;
 
   /** Whether we should retry an api call that returned 429 response */
   private shouldContinueAttempt(attempt: number): boolean {
@@ -273,6 +302,8 @@ export class ApiClient {
 
   /** Calls an API MAX_ATTEMPTS with exponential backoff to handle Onshape 429 responses */
   private async rateLimitedCall(callbackFn: () => Promise<unknown>) {
+    // Backoff state is local so it resets for every call rather than leaking across requests
+    let sleepTimeMs = ApiClient.INITIAL_SLEEP_MS;
     let attempt = 1;
     while (this.shouldContinueAttempt(attempt)) {
       try {
@@ -281,14 +312,16 @@ export class ApiClient {
         return result;
       } catch (error) {
         const errorException = error as Error;
-        if (errorException.cause === ApiClient.RATE_LIMITED_STATUS) {
-          LOG.error(`Handling error code 429 count=${this.apiErrorCount} sleep=${this.sleepTimeMs} ms`);
+        if (errorException.cause === ApiClient.PAYMENT_REQUIRED_STATUS) {
+          LOG.error('Received 402 lingo API limit reached. Aborting script.');
+          process.exit(1);
+        } else if (errorException.cause === ApiClient.RATE_LIMITED_STATUS) {
+          LOG.error(`Handling error code 429 attempt=${attempt - 1} sleep=${sleepTimeMs} ms`);
           if (!this.shouldContinueAttempt(attempt)) {
             throw error;
           }
-          await new Promise(r => setTimeout(r, this.sleepTimeMs));
-          this.sleepTimeMs = Math.floor(this.sleepTimeMs * ApiClient.SLEEP_MULTIFICATION_FACTOR);
-          this.apiErrorCount++;
+          await new Promise(r => setTimeout(r, sleepTimeMs));
+          sleepTimeMs = Math.floor(sleepTimeMs * ApiClient.SLEEP_MULTIFICATION_FACTOR);
         } else {
           throw error;
         }
